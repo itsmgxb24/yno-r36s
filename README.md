@@ -1,3 +1,6 @@
+> **R36S fork:** this branch adds a native YNOproject client for the R36S handheld (no browser).
+> See [`r36s/README.md`](r36s/README.md).
+
 # EasyRPG Player online fork
 
 Adds multiplayer functionality. 

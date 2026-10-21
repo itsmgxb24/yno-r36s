@@ -123,3 +123,8 @@ eboot.bin
 *.pem
 *.keystore
 *.jks
+
+# R36S / YNO native client
+/lib/liblcf
+/build/
+!/r36s/build/
