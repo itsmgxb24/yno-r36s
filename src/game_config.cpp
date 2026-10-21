@@ -15,6 +15,7 @@
  * along with EasyRPG Player. If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include "native/yno_platform.h"
 #include "game_config.h"
 #include "cmdline_parser.h"
 #include "filefinder.h"
@@ -114,7 +115,7 @@ Game_Config Game_Config::Create(CmdlineParser& cp) {
 	cfg.input.gamepad_swap_ab_and_xy.Set(true);
 #endif
 
-#if defined(USE_CUSTOM_FILEBUF) || defined(USE_LIBRETRO) || defined(__EMSCRIPTEN__)
+#if defined(USE_CUSTOM_FILEBUF) || defined(USE_LIBRETRO) || defined(EP_WEBLIKE_FS)
 	// Disable logging to file by default on
 	// - platforms with slow IO or bad FS drivers
 	// - libretro because the frontend handles the logging

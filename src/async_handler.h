@@ -45,6 +45,12 @@ namespace AsyncHandler {
 	void ClearRequests();
 
 	/**
+	 * Forgets all requests and the file mapping of the current game (the YNO client switches games
+	 * inside one process).
+	 */
+	void Reset();
+
+	/**
 	 * Creates a request to a file.
 	 * When the same file was already requested this will return an already
 	 * existing request.

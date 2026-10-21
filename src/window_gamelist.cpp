@@ -16,6 +16,7 @@
  */
 
 // Headers
+#include "native/yno_platform.h"
 #include "window_gamelist.h"
 #include "filefinder.h"
 #include "bitmap.h"
@@ -55,7 +56,7 @@ bool Window_GameList::Refresh(FilesystemView filesystem_base, bool show_dotdot) 
 #endif
 		assert(!dir.second.name.empty() && "VFS BUG: Empty filename in the folder");
 
-#ifdef __EMSCRIPTEN__
+#ifdef EP_WEBLIKE_FS
 		if (dir.second.name == "Save") {
 			continue;
 		}

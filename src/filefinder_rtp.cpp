@@ -15,6 +15,7 @@
  * along with EasyRPG Player. If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include "native/yno_platform.h"
 #include "filefinder_rtp.h"
 #include "output.h"
 #include "player.h"
@@ -32,7 +33,7 @@
 #endif
 
 FileFinder_RTP::FileFinder_RTP(bool no_rtp, bool no_rtp_warnings, std::string rtp_path) {
-#ifdef __EMSCRIPTEN__
+#ifdef EP_WEBLIKE_FS
 	// No RTP support for emscripten at the moment.
 	disable_rtp = true;
 #else

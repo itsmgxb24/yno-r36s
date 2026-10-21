@@ -16,6 +16,7 @@ public:
 	void Close() override;
 	void Send(std::string_view data) override;
 	void FlushQueue() override;
+	void Poll() override;
 protected:
 	struct IMPL;
 	std::unique_ptr<IMPL> impl;

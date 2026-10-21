@@ -20,11 +20,18 @@
 #include <fstream>
 #include <map>
 
+#include "native/yno_platform.h"
+
 #ifdef __EMSCRIPTEN__
 #  include <emscripten.h>
+#endif
+#ifdef EP_WEBLIKE_FS
 #  include <lcf/reader_util.h>
 #  include <nlohmann/json.hpp>
    using json = nlohmann::json;
+#  ifdef YNO_NATIVE
+#    include "native/yno_net.h"
+#  endif
 #endif
 
 #include "async_handler.h"
@@ -46,7 +53,7 @@ namespace {
 	std::unordered_map<std::string, std::shared_ptr<FileRequestAsync>> async_requests;
 	std::unordered_map<std::string, std::string> file_mapping;
 	int next_id = 0;
-#ifdef __EMSCRIPTEN__
+#ifdef EP_WEBLIKE_FS
 	int index_version = 1;
 #endif
 
@@ -145,11 +152,27 @@ namespace {
 		start_async_wget_with_retry(ctx);
 	}
 
+#elif defined(YNO_NATIVE)
+	// downloads on a worker thread, the result comes back on the main thread
+	void async_wget_with_retry(std::string url, std::string file, std::string, FileRequestAsync* obj) {
+		std::weak_ptr<FileRequestAsync> weak = obj->weak_from_this();
+		std::string dest = FileFinder::MakePath(FileFinder::Game().GetFullPath(), file);
+		std::string path = obj->GetPath();
+		YnoNet::DownloadFile(std::move(url), std::move(dest), [weak, path](bool ok, long status) {
+			if (!ok) {
+				Output::Debug("DL Failure: {} (HTTP {})", path, status);
+			}
+			if (auto sobj = weak.lock()) {
+				sobj->DownloadDone(ok);
+			}
+		});
+	}
+
 #endif
 }
 
 void AsyncHandler::CreateRequestMapping(const std::string& file) {
-#ifdef __EMSCRIPTEN__
+#ifdef EP_WEBLIKE_FS
 	auto f = FileFinder::Game().OpenInputStream(file);
 	if (!f) {
 		Output::Error("Emscripten: Reading index.json failed");
@@ -219,6 +242,14 @@ void AsyncHandler::CreateRequestMapping(const std::string& file) {
 #else
 	// no-op
 	(void)file;
+#endif
+}
+
+void AsyncHandler::Reset() {
+	async_requests.clear();
+	file_mapping.clear();
+#ifdef EP_WEBLIKE_FS
+	index_version = 1;
 #endif
 }
 
@@ -341,19 +372,23 @@ void FileRequestAsync::Start() {
 
 	state = State_Pending;
 
-#ifdef __EMSCRIPTEN__
+#ifdef EP_WEBLIKE_FS
 	std::string request_path;
-#  ifdef EM_GAME_URL
-	request_path = EM_GAME_URL;
+#  if defined(YNO_NATIVE)
+	request_path = YnoNet::GetConfig().data_url + YnoNet::GetConfig().game_id + "/";
 #  else
+#    ifdef EM_GAME_URL
+	request_path = EM_GAME_URL;
+#    else
 	request_path = "games/";
-#  endif
+#    endif
 
 	if (!Player::emscripten_game_name.empty()) {
 		request_path += Player::emscripten_game_name + "/";
 	} else {
 		request_path += "default/";
 	}
+#  endif
 
 	std::string modified_path;
 	if (index_version >= 2) {
@@ -402,10 +437,6 @@ void FileRequestAsync::Start() {
 	auto request_file = (it != file_mapping.end() ? it->second : path);
 	async_wget_with_retry(request_path, std::move(request_file), "", this);
 #else
-#  ifdef EM_GAME_URL
-#    warning EM_GAME_URL set and not an Emscripten build!
-#  endif
-
 #  ifndef EP_DEBUG_SIMULATE_ASYNC
 	DownloadDone(true);
 #  endif
@@ -413,7 +444,7 @@ void FileRequestAsync::Start() {
 }
 
 void FileRequestAsync::UpdateProgress() {
-#ifndef __EMSCRIPTEN__
+#ifndef EP_WEBLIKE_FS
 	// Fake download for testing event handlers
 
 	if (!IsReady() && Rand::ChanceOf(1, 100)) {
@@ -460,7 +491,7 @@ void FileRequestAsync::DownloadDone(bool success) {
 	}
 
 	if (success) {
-#ifdef __EMSCRIPTEN__
+#ifdef EP_WEBLIKE_FS
 		if (state == State_Pending) {
 			// Update directory structure (new file was added)
 			if (FileFinder::Game()) {

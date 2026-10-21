@@ -16,6 +16,7 @@
  */
 
 // Headers
+#include "native/yno_platform.h"
 #include <cassert>
 #include <initializer_list>
 #include <iomanip>
@@ -2035,7 +2036,7 @@ std::string Game_Map::ConstructMapName(int map_id, bool is_easyrpg) {
 }
 
 FileRequestAsync* Game_Map::RequestMap(int map_id) {
-#ifdef __EMSCRIPTEN__
+#ifdef EP_WEBLIKE_FS
 	Player::translation.RequestAndAddMap(map_id);
 #endif
 

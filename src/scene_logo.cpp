@@ -16,6 +16,11 @@
  */
 
 // Headers
+#include "native/yno_platform.h"
+#ifdef YNO_NATIVE
+#  include "native/yno_net.h"
+#  include "native/scene_yno_games.h"
+#endif
 #include "scene_logo.h"
 #include "async_handler.h"
 #include "bitmap.h"
@@ -36,6 +41,15 @@
 #include "version.h"
 #include <ctime>
 #include <memory>
+
+namespace {
+	// the index.json of the current game was requested (reset when another game is picked)
+	bool index_requested = false;
+}
+
+void Scene_Logo::ResetIndexRequest() {
+	index_requested = false;
+}
 
 Scene_Logo::Scene_Logo() :
 	frame_counter(0) {
@@ -117,7 +131,16 @@ void Scene_Logo::vUpdate() {
 			}
 		}
 		else {
+#ifdef YNO_NATIVE
+			if (Scene::Find(Scene::GameBrowser)) {
+				Output::Warning("Could not load {}. Check the internet connection.", YnoNet::GetConfig().game_id);
+				Scene::Pop();  // back to the game list
+			} else {
+				Scene::Push(std::make_shared<Scene_YnoGames>(), true);
+			}
+#else
 			Scene::Push(std::make_shared<Scene_GameBrowser>(), true);
+#endif
 		}
 	}
 }
@@ -132,13 +155,18 @@ bool Scene_Logo::DetectGame() {
 		FileFinder::SetGameFilesystem(fs);
 	}
 
-#ifdef __EMSCRIPTEN__
-	static bool once = true;
-	if (once) {
+#ifdef YNO_NATIVE
+	if (YnoNet::GetConfig().game_id.empty()) {
+		return true;  // no game chosen yet: the game list is shown instead
+	}
+#endif
+
+#ifdef EP_WEBLIKE_FS
+	if (!index_requested) {
 		FileRequestAsync* index = AsyncHandler::RequestFile("index.json");
 		index->SetImportantFile(true);
 		request_id = index->Bind(&Scene_Logo::OnIndexReady, this);
-		once = false;
+		index_requested = true;
 		index->Start();
 		return false;
 	}
@@ -226,7 +254,7 @@ std::vector<std::vector<uint8_t>> Scene_Logo::LoadLogos() {
 		}
 	}
 
-#ifndef __EMSCRIPTEN__
+#ifndef EP_WEBLIKE_FS
 	if (logos.empty()) {
 		// Attempt reading Logos from RPG_RT.exe (not supported on Emscripten)
 		auto exeis = FileFinder::Game().OpenFile(EXE_NAME);

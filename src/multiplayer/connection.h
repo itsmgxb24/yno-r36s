@@ -35,6 +35,8 @@ public:
 
 	virtual void Send(std::string_view data) = 0;
 	virtual void FlushQueue();
+	// native builds: dispatches what the socket thread received (no-op on the web)
+	virtual void Poll() {}
 
 	template<typename M, typename = std::enable_if_t<std::conjunction_v<
 		std::is_convertible<M, S2CPacket>,

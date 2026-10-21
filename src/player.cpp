@@ -16,6 +16,15 @@
  */
 
 // Headers
+#include "native/yno_platform.h"
+#ifdef YNO_NATIVE
+#  include "native/yno_net.h"
+#  include "native/yno_session.h"
+#  include "native/yno_overlay.h"
+#  include "multiplayer/game_multiplayer.h"
+#  include <fstream>
+#  include <iterator>
+#endif
 #include "game_constants.h"
 #include <algorithm>
 #include <cstring>
@@ -90,7 +99,7 @@
 #include "platform/android/android.h"
 #endif
 
-#ifndef __EMSCRIPTEN__
+#ifndef EP_WEBLIKE_FS
 // This is not used on Emscripten.
 #include "exe_reader.h"
 #endif
@@ -162,6 +171,10 @@ void Player::Init(std::vector<std::string> args) {
 	// Must be called before the first call to Output
 	Graphics::Init();
 
+#ifdef YNO_NATIVE
+	YnoNet::Init();
+#endif
+
 #ifdef _WIN32
 	SetConsoleOutputCP(65001);
 #endif
@@ -169,6 +182,17 @@ void Player::Init(std::vector<std::string> args) {
 	// First parse command line arguments
 	arguments = args;
 	auto cfg = ParseCommandLine();
+
+#ifdef YNO_NATIVE
+	{
+		// Without the room key the server rejects our packets: stay a single player game
+		auto& mp = Game_Multiplayer::Instance();
+		mp.session_token = YnoNet::GetConfig().auth_cookie;
+		mp.session_active = !YnoNet::GetConfig().room_key.empty();
+		if (!YnoNet::GetConfig().game_id.empty()) YnoSession::Start();  // otherwise the game list starts it
+		YnoOverlay::Init();
+	}
+#endif
 
 	// Display a nice version string
 	auto header = GetFullVersionString() + " started";
@@ -229,6 +253,40 @@ void Player::Run() {
 
 void Player::MainLoop() {
 	Instrumentation::FrameScope iframe;
+
+#ifdef YNO_NATIVE
+	YnoNet::Poll();  // finished downloads, ...
+	YnoSession::Update();
+	{
+		// development aid: YNO_SCREENSHOT=/path/shot.png:300 saves a screenshot at frame 300 (and quits
+		// when YNO_QUIT_AFTER_SHOT is set), so the engine can be checked without a display
+		static const char* env = getenv("YNO_SCREENSHOT");
+		static std::string shot_path;
+		static int shot_frame = -1, frame_counter = 0;
+		if (env && shot_frame < 0) {
+			std::string v = env;
+			auto colon = v.rfind(':');
+			shot_path = v.substr(0, colon);
+			shot_frame = colon == std::string::npos ? 100 : atoi(v.c_str() + colon + 1);
+		}
+		if (frame_counter % 1800 == 0 && getenv("YNO_LOG")) {
+			// resident memory of the whole client (the point of this port: far less than a browser)
+			std::ifstream statm("/proc/self/statm");
+			long pages = 0, rss = 0;
+			statm >> pages >> rss;
+			Output::Debug("mem: rss {} MB, downloads pending {}", rss * 4096 / (1024 * 1024), YnoNet::PendingDownloads());
+		}
+		if (shot_frame < 0) ++frame_counter;
+		if (shot_frame >= 0 && ++frame_counter == shot_frame) {
+			std::ofstream os(shot_path, std::ios::binary);
+			Output::TakeScreenshot(os);
+			Output::Debug("test screenshot written: {}", shot_path);
+			if (getenv("YNO_QUIT_AFTER_SHOT")) {
+				Player::exit_flag = true;
+			}
+		}
+	}
+#endif
 
 	const auto frame_time = Game_Clock::now();
 	Game_Clock::OnNextFrame(frame_time);
@@ -433,6 +491,11 @@ void Player::Exit() {
 	Output::Quit();
 	FileFinder::Quit();
 	DisplayUi.reset();
+#ifdef YNO_NATIVE
+	YnoOverlay::Shutdown();
+	YnoSession::Stop();
+	YnoNet::Shutdown();
+#endif
 }
 
 Game_Config Player::ParseCommandLine() {
@@ -691,6 +754,38 @@ Game_Config Player::ParseCommandLine() {
 			continue;
 		}
 #endif
+#ifdef YNO_NATIVE
+		if (cp.ParseNext(arg, 1, "--yno-game")) {
+			if (arg.NumValues() > 0) YnoNet::GetConfig().game_id = arg.Value(0);
+			continue;
+		}
+		if (cp.ParseNext(arg, 1, "--yno-games-dir")) {
+			if (arg.NumValues() > 0) YnoNet::GetConfig().games_dir = arg.Value(0);
+			continue;
+		}
+		if (cp.ParseNext(arg, 1, "--yno-data-url")) {
+			if (arg.NumValues() > 0) YnoNet::GetConfig().data_url = arg.Value(0);
+			continue;
+		}
+		if (cp.ParseNext(arg, 1, "--yno-server")) {
+			if (arg.NumValues() > 0) YnoNet::GetConfig().server_host = arg.Value(0);
+			continue;
+		}
+		if (cp.ParseNext(arg, 1, "--yno-auth")) {
+			if (arg.NumValues() > 0) YnoNet::GetConfig().auth_cookie = arg.Value(0);
+			continue;
+		}
+		if (cp.ParseNext(arg, 1, "--yno-room-key-file")) {
+			// the secret that signs /room packets; without it the game rooms cannot be joined
+			if (arg.NumValues() > 0) {
+				std::ifstream key(arg.Value(0), std::ios::binary);
+				auto& k = YnoNet::GetConfig().room_key;
+				k.assign(std::istreambuf_iterator<char>(key), std::istreambuf_iterator<char>());
+				while (!k.empty() && (k.back() == '\n' || k.back() == '\r')) k.pop_back();
+			}
+			continue;
+		}
+#endif
 		cp.SkipNext();
 	}
 
@@ -782,7 +877,7 @@ void Player::CreateGameObjects() {
 	int& engine = game_config.engine;
 	std::unordered_map<Game_Constants::ConstantType, int32_t> game_constant_overrides;
 
-#ifndef __EMSCRIPTEN__
+#ifndef EP_WEBLIKE_FS
 	// Attempt reading ExFont and version information from RPG_RT.exe (not supported on Emscripten)
 	std::unique_ptr<EXEReader> exe_reader;
 	const auto exe_file = game_config.engine_path.Get().empty() ? EXE_NAME : game_config.engine_path.Get();
@@ -1368,7 +1463,7 @@ std::string Player::GetEncoding() {
 			if (db) {
 				std::vector<std::string> encodings = lcf::ReaderUtil::DetectEncodings(*db);
 
-#ifndef __EMSCRIPTEN__
+#ifndef EP_WEBLIKE_FS
 				for (std::string &enc : encodings) {
 					// Heuristic: Check title graphic, system graphic, cursor SE, title BGM
 					// Pure ASCII is skipped as it provides no added value

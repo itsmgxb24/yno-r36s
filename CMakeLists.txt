@@ -404,7 +404,6 @@ add_library(${PROJECT_NAME} OBJECT
 	src/version.h
 	src/weather.cpp
 	src/weather.h
-	src/web_api.cpp
 	src/web_api.h
 	src/window_about.cpp
 	src/window_about.h
@@ -1009,6 +1008,34 @@ else()
 		DEFINITION HAVE_NLOHMANN_JSON
 		TARGET nlohmann_json::nlohmann_json
 		ONLY_CONFIG)
+endif()
+
+# Platform glue towards the host: the browser (Emscripten) or the YNO native client
+option(PLAYER_YNO_NATIVE "Native YNOproject client: libcurl networking instead of the browser" OFF)
+if(CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
+	target_sources(${PROJECT_NAME} PRIVATE src/web_api.cpp)
+elseif(PLAYER_YNO_NATIVE)
+	find_package(CURL REQUIRED)
+	find_package(nlohmann_json REQUIRED)
+	target_sources(${PROJECT_NAME} PRIVATE
+		src/native/yno_platform.h
+		src/native/yno_net.cpp
+		src/native/yno_net.h
+		src/native/yno_ws.cpp
+		src/native/yno_ws.h
+		src/native/yno_session.cpp
+		src/native/yno_session.h
+		src/native/yno_overlay.cpp
+		src/native/yno_overlay.h
+		src/native/yno_games.cpp
+		src/native/yno_games.h
+		src/native/scene_yno_games.cpp
+		src/native/scene_yno_games.h
+		src/native/web_api_native.cpp)
+	target_compile_definitions(${PROJECT_NAME} PUBLIC YNO_NATIVE HAVE_NLOHMANN_JSON)
+	target_link_libraries(${PROJECT_NAME} CURL::libcurl nlohmann_json::nlohmann_json)
+else()
+	message(FATAL_ERROR "This fork needs -DPLAYER_YNO_NATIVE=ON (or an Emscripten toolchain): src/web_api.cpp is web only.")
 endif()
 
 # Configure Audio backends

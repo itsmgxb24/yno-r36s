@@ -49,6 +49,9 @@ public:
 
 	static std::vector<std::vector<uint8_t>> LoadLogos();
 
+	/** The next DetectGame asks for index.json again (a different game was selected). */
+	static void ResetIndexRequest();
+
 private:
 	std::unique_ptr<Sprite> logo;
 	BitmapRef logo_img;

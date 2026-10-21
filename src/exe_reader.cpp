@@ -17,7 +17,8 @@
 
 // All of this code is unused on EMSCRIPTEN. *Do not use it*!
 
-#ifndef __EMSCRIPTEN__
+#include "native/yno_platform.h"
+#ifndef EP_WEBLIKE_FS
 
 #include "exe_reader.h"
 #include "image_bmp.h"

@@ -477,6 +477,10 @@ using namespace Messages::C2S;
 void Game_Multiplayer::Connect(int map_id, bool room_switch) {
 	Output::Debug("MP: connecting to id={}", map_id);
 	room_id = map_id;
+	if (Web_API::GetSocketURL().empty()) {
+		Output::Debug("MP: no server address / room key, staying offline");
+		return;
+	}
 	if (!session_active) {
 		Output::Debug("MP: session_active == false, refusing to connect");
 		return;
@@ -933,6 +937,7 @@ void Game_Multiplayer::Update() {
 		DrawableMgr::SetLocalList(old_list);
 	}
 
+	connection.Poll();
 	if (session_connected)
 		connection.FlushQueue();
 }

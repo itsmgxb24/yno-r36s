@@ -16,10 +16,11 @@
  */
 
 // Headers
+#include "native/yno_platform.h"
 #include "game_destiny.h"
 #include "filefinder.h"
 
-#ifndef __EMSCRIPTEN__
+#ifndef EP_WEBLIKE_FS
 #include "exe_reader.h"
 #endif // !__EMSCRIPTEN__
 #include "output.h"
@@ -52,7 +53,7 @@ void Game_Destiny::Load()
 	uint32_t floatSize = 0;
 	uint32_t stringSize = 0;
 
-#ifndef __EMSCRIPTEN__
+#ifndef EP_WEBLIKE_FS
 	Filesystem_Stream::InputStream exe = FileFinder::Game().OpenFile(EXE_NAME);
 
 	if (exe)

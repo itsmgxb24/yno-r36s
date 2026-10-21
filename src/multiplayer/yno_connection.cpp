@@ -1,11 +1,18 @@
 #include "yno_connection.h"
-#include <emscripten/websocket.h>
 #include "../external/TinySHA1.hpp"
+
+#ifdef __EMSCRIPTEN__
+#  include <emscripten/websocket.h>
+#else
+#  include "../native/yno_net.h"
+#  include "../native/yno_ws.h"
+#endif
 
 #ifndef PLAYER_PSK
 #define PLAYER_PSK
 #endif
 
+#ifdef __EMSCRIPTEN__
 struct YNOConnection::IMPL {
 	EMSCRIPTEN_WEBSOCKET_T socket;
 	uint32_t msg_count;
@@ -63,11 +70,19 @@ struct YNOConnection::IMPL {
 		emscripten_websocket_set_onmessage_callback(socket, userData, onmessage);
 	}
 };
+#else // native
+struct YNOConnection::IMPL {
+	YnoNet::WsClient ws;
+	uint32_t msg_count;
+	bool closed;
+};
+#endif
 
 const size_t YNOConnection::MAX_QUEUE_SIZE{ 4088 };
 
 
 
+#ifdef __EMSCRIPTEN__
 YNOConnection::YNOConnection() : impl(new IMPL) {
 	impl->msg_count = 0;
 	impl->closed = true;
@@ -120,6 +135,84 @@ void YNOConnection::Close() {
 	emscripten_websocket_delete(impl->socket);
 }
 
+#else
+YNOConnection::YNOConnection() : impl(new IMPL) {
+	impl->msg_count = 0;
+	impl->closed = true;
+}
+
+YNOConnection::YNOConnection(YNOConnection&& o)
+	: Connection(std::move(o)), impl(std::move(o.impl)) {
+}
+YNOConnection& YNOConnection::operator=(YNOConnection&& o) {
+	Connection::operator=(std::move(o));
+	if (this != &o) {
+		Close();
+		impl = std::move(o.impl);
+	}
+	return *this;
+}
+
+YNOConnection::~YNOConnection() {
+	if (impl)
+		Close();
+}
+
+void YNOConnection::Open(std::string_view uri) {
+	if (!impl->closed) {
+		Close();
+	}
+	impl->msg_count = 0;
+	impl->closed = false;
+	const auto& auth = YnoNet::GetConfig().auth_cookie;
+	impl->ws.Open(std::string(uri), auth.empty() ? std::string() : "auth=" + auth);
+}
+
+void YNOConnection::Close() {
+	Multiplayer::Connection::Close();
+	if (impl->closed)
+		return;
+	impl->closed = true;
+	impl->ws.Close();
+}
+
+void YNOConnection::Poll() {
+	YnoNet::WsClient::Event ev;
+	while (impl && impl->ws.PollEvent(ev)) {
+		switch (ev.type) {
+		case YnoNet::WsClient::Event::Open:
+			SetConnected(true);
+			DispatchSystem(SystemMessage::OPEN);
+			break;
+		case YnoNet::WsClient::Event::Close:
+			SetConnected(false);
+			impl->closed = true;
+			DispatchSystem(ev.code == 1028 ? SystemMessage::EXIT : SystemMessage::CLOSE);
+			break;
+		case YnoNet::WsClient::Event::Message: {
+			if (!ev.binary) {
+				break;
+			}
+			std::string_view cstr(ev.data);
+			std::vector<std::string_view> mstrs = Split(cstr, Multiplayer::Packet::MSG_DELIM);
+			for (auto& mstr : mstrs) {
+				auto p = mstr.find(Multiplayer::Packet::PARAM_DELIM);
+				if (p == mstr.npos) {
+					Dispatch(mstr);
+				} else {
+					auto namestr = mstr.substr(0, p);
+					auto argstr = mstr.substr(p + Multiplayer::Packet::PARAM_DELIM.size());
+					Dispatch(namestr, Split(argstr));
+				}
+			}
+			break;
+		}
+		}
+	}
+}
+
+#endif
+
 template<typename T>
 std::string_view as_bytes(const T& v) {
 	static_assert(sizeof(v) % 2 == 0, "Unsupported numeric type");
@@ -165,10 +258,16 @@ std::string as_big_endian_bytes(T v) {
 		return reverse_endian(sr);
 }
 
+#ifdef __EMSCRIPTEN__
 const unsigned char psk[] = PLAYER_PSK;
+#endif
 
 std::string calculate_header(uint32_t key, uint32_t count, std::string_view msg) {
+#ifdef __EMSCRIPTEN__
 	std::string hashmsg{as_bytes(psk)};
+#else
+	std::string hashmsg{YnoNet::GetConfig().room_key};
+#endif
 	hashmsg += as_big_endian_bytes(key);
 	hashmsg += as_big_endian_bytes(count);
 	hashmsg += msg;
@@ -186,6 +285,7 @@ std::string calculate_header(uint32_t key, uint32_t count, std::string_view msg)
 void YNOConnection::Send(std::string_view data) {
 	if (!IsConnected())
 		return;
+#ifdef __EMSCRIPTEN__
 	unsigned short ready;
 	emscripten_websocket_get_ready_state(impl->socket, &ready);
 	if (ready == 1) { // OPEN
@@ -194,6 +294,14 @@ void YNOConnection::Send(std::string_view data) {
 		sendmsg += data;
 		emscripten_websocket_send_binary(impl->socket, sendmsg.data(), sendmsg.size());
 	}
+#else
+	if (impl->ws.IsOpen()) {
+		++impl->msg_count;
+		auto sendmsg = calculate_header(GetKey(), impl->msg_count, data);
+		sendmsg += data;
+		impl->ws.Send(std::move(sendmsg), true);
+	}
+#endif
 }
 
 void YNOConnection::FlushQueue() {

@@ -121,6 +121,13 @@ Input::ButtonMappingArray Input::GetDefaultButtonMappings() {
 		{SHIFT, Keys::JOY_Y},
 		{N0, Keys::JOY_LSTICK},
 		{N5, Keys::JOY_RSTICK},
+#ifdef YNO_NATIVE
+		// Yume Nikki: 1 = use the effect, 3 = take it off, 5 = put it down, 9 = pinch the cheek (wake up).
+		// Select is left free (it is half of the quit combination and must never reset the game).
+		{N3, Keys::JOY_SHOULDER_LEFT},
+		{N1, Keys::JOY_SHOULDER_RIGHT},
+		{SETTINGS_MENU, Keys::JOY_START},
+#else
 		{MULTIPLY, Keys::JOY_REAR_LEFT_1},
 		{DIVIDE, Keys::JOY_REAR_LEFT_2},
 		{PLUS, Keys::JOY_REAR_RIGHT_1},
@@ -129,6 +136,7 @@ Input::ButtonMappingArray Input::GetDefaultButtonMappings() {
 		{TOGGLE_FPS, Keys::JOY_SHOULDER_RIGHT},
 		{SETTINGS_MENU, Keys::JOY_START},
 		{RESET, Keys::JOY_BACK},
+#endif
 
 #if USE_SDL==1
 		// Arbitrary: Remap this when porting to a embedded platform with SDL1
@@ -155,10 +163,15 @@ Input::ButtonMappingArray Input::GetDefaultButtonMappings() {
 		{N7, Keys::JOY_RSTICK_UP_LEFT},
 		{N8, Keys::JOY_RSTICK_UP},
 		{N9, Keys::JOY_RSTICK_UP_RIGHT},
+#ifdef YNO_NATIVE
+		{N5, Keys::JOY_RTRIGGER_FULL},
+		{N9, Keys::JOY_LTRIGGER_FULL},
+#else
 		{FAST_FORWARD_A, Keys::JOY_RTRIGGER_SOFT},
 		{FAST_FORWARD_B, Keys::JOY_RTRIGGER_FULL},
 		{DEBUG_THROUGH, Keys::JOY_LTRIGGER_SOFT},
 		{DEBUG_MENU, Keys::JOY_LTRIGGER_FULL},
+#endif
 #endif
 
 #if defined(USE_TOUCH) && defined(SUPPORT_TOUCH)
