@@ -19,6 +19,7 @@
 #include "../bitmap.h"
 #include "../scene.h"
 #include "yno_games.h"
+#include "yno_savesync.h"
 
 class Scene_YnoGames : public Scene {
 public:
@@ -31,7 +32,7 @@ public:
 	void DrawBackground(Bitmap& dst) override;
 
 private:
-	enum class Mode { List, Options, Confirm, Busy, Report };
+	enum class Mode { List, Options, Confirm, Busy, Report, Sync, Conflict };
 
 	class Screen;
 	struct Shared;
@@ -41,6 +42,8 @@ private:
 	void UpdateList();
 	void UpdateOptions();
 	void StartGame();
+	void LaunchGame();
+	void UpdateSync();
 	void OpenOptions();
 	void StartMaintenance(YnoGames::Kind kind);
 	void DevHooks();
@@ -49,6 +52,7 @@ private:
 	int index = 0;         // selected game
 	int top = 0;           // first visible row of the list
 	int option = 0;        // selected entry of the options of a game
+	int choice = 1;        // conflict screen: 0 = the server save, 1 = the one on the card
 	YnoGames::Kind confirm_kind = YnoGames::Kind::Redownload;  // what the confirmation screen is about
 	bool dirty = true;
 	bool starting = false;
@@ -57,6 +61,7 @@ private:
 	BitmapRef image;
 	std::shared_ptr<Shared> shared;
 	std::shared_ptr<YnoGames::Report> report;
+	std::shared_ptr<YnoSaveSync::Pull> pull;  // the save check before the game starts
 };
 
 #endif

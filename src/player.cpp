@@ -750,6 +750,10 @@ Game_Config Player::ParseCommandLine() {
 			if (arg.NumValues() > 0) YnoNet::GetConfig().auth_cookie = arg.Value(0);
 			continue;
 		}
+		if (cp.ParseNext(arg, 0, "--yno-no-save-sync")) {
+			YnoNet::GetConfig().save_sync = false;
+			continue;
+		}
 		if (cp.ParseNext(arg, 1, "--yno-room-key-file")) {
 			// the secret that signs /room packets; without it the game rooms cannot be joined
 			if (arg.NumValues() > 0) {

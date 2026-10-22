@@ -1009,6 +1009,8 @@ if(PLAYER_YNO_NATIVE)
 		src/native/yno_overlay.h
 		src/native/yno_games.cpp
 		src/native/yno_games.h
+		src/native/yno_savesync.cpp
+		src/native/yno_savesync.h
 		src/native/scene_yno_games.cpp
 		src/native/scene_yno_games.h
 		src/native/web_api_native.cpp)
