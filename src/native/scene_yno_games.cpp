@@ -16,6 +16,7 @@
 #include <mutex>
 #include <system_error>
 
+#include <SDL.h>
 #include <lcf/data.h>
 
 #include "../async_handler.h"
@@ -376,12 +377,13 @@ void Scene_YnoGames::UpdateList() {
 	const int rows = (image ? image->height() : Player::screen_height) - kListTop - 22;
 	const int visible = std::max(1, rows / kRowHeight);
 
+	// Only up and down move the cursor: a jump by a page on left/right is too easy to hit by accident
+	// (a worn stick is enough) and silently changes which game the next button press is about.
 	int old = index;
 	if (Input::IsRepeated(Input::DOWN)) index = (index + 1) % count;
 	if (Input::IsRepeated(Input::UP)) index = (index + count - 1) % count;
-	if (Input::IsTriggered(Input::RIGHT)) index = std::min(count - 1, index + visible);
-	if (Input::IsTriggered(Input::LEFT)) index = std::max(0, index - visible);
 	if (index != old) {
+		Output::Debug("hub: cursor {} -> {} ({})", old, index, YnoGames::All()[index].id);
 		Main_Data::game_system->SePlay(Main_Data::game_system->GetSystemSE(Main_Data::game_system->SFX_Cursor));
 		if (index < top) top = index;
 		if (index >= top + visible) top = index - visible + 1;
@@ -393,6 +395,7 @@ void Scene_YnoGames::UpdateList() {
 		Scene::Pop();
 	} else if (Input::IsTriggered(Input::DECISION)) {
 		Main_Data::game_system->SePlay(Main_Data::game_system->GetSystemSE(Main_Data::game_system->SFX_Decision));
+		Output::Debug("hub: A on {} (index {})", YnoGames::All()[index].id, index);
 		starting = true;  // the next frame starts the game; this one draws "Loading..."
 		dirty = true;
 	} else if (Input::IsTriggered(Input::SHIFT)) {
@@ -408,6 +411,7 @@ void Scene_YnoGames::OpenOptions() {
 
 	// count what is on the card (a big game has thousands of files)
 	const std::string id = YnoGames::All()[index].id;
+	Output::Debug("hub: options for {} (index {})", id, index);
 	{
 		std::lock_guard<std::mutex> lock(shared->mutex);
 		shared->info_game = id;
@@ -525,15 +529,42 @@ void Scene_YnoGames::StartGame() {
 //   YNO_HUB_ACTION=<id>:verify|redownload|all   run a maintenance and print the report
 //   YNO_TEST_FETCH="<id>|<path>"    download one file the way the game would and print the result
 //   YNO_HUB_UI=options|confirm      open that screen of the first game after a short while
+//   YNO_HUB_KEYS="ddy"              press keys on the list: u d a b y (up, down, A, B, Y)
 void Scene_YnoGames::DevHooks() {
 	static const char* pick = getenv("YNO_HUB_PICK");
 	static const char* action = getenv("YNO_HUB_ACTION");
 	static const char* fetch = getenv("YNO_TEST_FETCH");
 	static const char* ui = getenv("YNO_HUB_UI");
+	static const char* keys = getenv("YNO_HUB_KEYS");
 	static int frames = 0;
 	static bool fetched = false;
-	if (!pick && !action && !fetch && !ui) return;
+	if (!pick && !action && !fetch && !ui && !keys) return;
 	++frames;
+
+	if (keys && frames >= 60) {
+		// press one key of the list every 12 frames: down on the first frame, up on the fourth
+		static std::vector<SDL_Scancode> script;
+		if (script.empty()) {
+			for (const char* c = keys; *c; ++c) {
+				switch (*c) {
+				case 'u': script.push_back(SDL_SCANCODE_UP); break;
+				case 'd': script.push_back(SDL_SCANCODE_DOWN); break;
+				case 'a': script.push_back(SDL_SCANCODE_RETURN); break;
+				case 'b': script.push_back(SDL_SCANCODE_ESCAPE); break;
+				case 'y': script.push_back(SDL_SCANCODE_LSHIFT); break;
+				}
+			}
+		}
+		size_t step = static_cast<size_t>(frames - 60) / 12;
+		int phase = (frames - 60) % 12;
+		if (step < script.size() && (phase == 0 || phase == 4)) {
+			SDL_Event ev{};
+			ev.type = phase == 0 ? SDL_KEYDOWN : SDL_KEYUP;
+			ev.key.keysym.scancode = script[step];
+			ev.key.state = phase == 0 ? SDL_PRESSED : SDL_RELEASED;
+			SDL_PushEvent(&ev);
+		}
+	}
 
 	if (ui && frames == 50) {
 		OpenOptions();

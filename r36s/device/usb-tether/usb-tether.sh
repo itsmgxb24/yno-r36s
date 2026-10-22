@@ -170,6 +170,10 @@ do_start() {
     if ! wait_iface; then
         bad "no USB network interface appeared"
         hint "plug the phone into the R36S USB-C port (data cable, OTG adapter) and switch USB tethering ON"
+        hint "the console always powers the port, but a phone only shows up on USB after it is told to: pull the"
+        hint "notification 'Charging this device via USB' and pick USB tethering, or set Developer options ->"
+        hint "Default USB configuration -> USB tethering. If the phone never shows that notification it does not"
+        hint "see a USB host at all (charge-only cable, or the port does not talk data to it)"
         hint "USB devices the kernel sees:"
         list_usb
         hint "kernel messages:"
