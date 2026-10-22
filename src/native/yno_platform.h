@@ -10,9 +10,9 @@
 #ifndef EP_NATIVE_YNO_PLATFORM_H
 #define EP_NATIVE_YNO_PLATFORM_H
 
-// The YNO builds fetch game files lazily over HTTP into the game directory, guided by index.json.
-// On the web the directory is Emscripten's file system, on the handheld it is a normal one.
-#if defined(__EMSCRIPTEN__) || defined(YNO_NATIVE)
+// The YNO client fetches game files lazily over HTTP into the game directory, guided by index.json
+// (the engine was written for the web player, where this happens in the browser's file system).
+#ifdef YNO_NATIVE
 #  define EP_WEBLIKE_FS 1
 #endif
 

@@ -28,8 +28,6 @@
 #elif defined(__ANDROID__)
 #  include <jni.h>
 #  include <SDL3/SDL_system.h>
-#elif defined(__EMSCRIPTEN__)
-#  include <emscripten.h>
 #elif defined(__WIIU__)
 #  include "platform/wiiu/main.h"
 #endif
@@ -169,11 +167,6 @@ Sdl3Ui::Sdl3Ui(long width, long height, const Game_Config& cfg) : BaseUi(cfg)
 #ifdef __LINUX__
 	// Set the application class name
 	setenv("SDL_VIDEO_X11_WMCLASS", GAME_TITLE, 0);
-#endif
-#ifdef __EMSCRIPTEN__
-	SDL_SetHint(SDL_HINT_EMSCRIPTEN_ASYNCIFY, "0");
-	// Only handle keyboard events when the canvas has focus
-	SDL_SetHint(SDL_HINT_EMSCRIPTEN_KEYBOARD_ELEMENT, "#canvas");
 #endif
 
 	if (!SDL_Init(SDL_INIT_VIDEO)) {
@@ -318,11 +311,7 @@ void Sdl3Ui::EndDisplayModeChange() {
 			}
 
 			current_display_mode.effective = true;
-#ifdef __EMSCRIPTEN__
-			SetIsFullscreen(true);
-#else
 			SetIsFullscreen((current_display_mode.flags & SDL_WINDOW_FULLSCREEN) == SDL_WINDOW_FULLSCREEN);
-#endif
 	}
 }
 
@@ -438,8 +427,6 @@ bool Sdl3Ui::RefreshDisplayMode() {
 		renderer_sg.Dismiss();
 		window_sg.Dismiss();
 	} else {
-		// Browser handles fast resizing for emscripten, TODO: use fullscreen API
-#ifndef __EMSCRIPTEN__
 		bool is_fullscreen = (flags & SDL_WINDOW_FULLSCREEN) == SDL_WINDOW_FULLSCREEN;
 		if (is_fullscreen) {
 			SDL_SetWindowFullscreen(sdl_window, SDL_WINDOW_FULLSCREEN);
@@ -453,7 +440,6 @@ bool Sdl3Ui::RefreshDisplayMode() {
 				SDL_SetWindowSize(sdl_window, display_width_zoomed, display_height_zoomed);
 			}
 		}
-#endif
 	}
 	// Need to set up icon again, some platforms recreate the window when
 	// creating the renderer (i.e. Windows), see also comment in SetAppIcon()
@@ -1215,9 +1201,7 @@ int FilterUntilFocus(const SDL_Event* evnt) {
 }
 
 void Sdl3Ui::vGetConfig(Game_ConfigVideo& cfg) const {
-#ifdef __EMSCRIPTEN__
-	cfg.renderer.Lock("SDL3 (Software, Emscripten)");
-#elif defined(__wii__)
+#if defined(__wii__)
 	cfg.renderer.Lock("SDL3 (Software, Wii)");
 #elif defined(__WIIU__)
 	cfg.renderer.Lock("SDL3 (Software, Wii U)");
@@ -1242,16 +1226,7 @@ void Sdl3Ui::vGetConfig(Game_ConfigVideo& cfg) const {
 	cfg.window_zoom.Set(current_display_mode.zoom);
 	cfg.fullscreen.Set(IsFullscreen());
 
-#ifdef __EMSCRIPTEN__
-	// Fullscreen is handled by the browser
-	cfg.fullscreen.SetOptionVisible(false);
-	cfg.fps_limit.SetOptionVisible(false);
-	cfg.window_zoom.SetOptionVisible(false);
-	// Toggling this freezes the web player
-	cfg.vsync.SetOptionVisible(false);
-	cfg.pause_when_focus_lost.Lock(false);
-	cfg.pause_when_focus_lost.SetOptionVisible(false);
-#elif defined(__wii__)
+#if defined(__wii__)
 	cfg.fullscreen.SetOptionVisible(false);
 #elif defined(__WIIU__)
 	// Only makes the screen flicker

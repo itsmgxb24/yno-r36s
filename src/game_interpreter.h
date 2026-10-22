@@ -52,11 +52,7 @@ public:
 	static Game_Interpreter& GetForegroundInterpreter();
 
 	Game_Interpreter(bool _main_flag = false);
-#ifndef __EMSCRIPTEN__
-	// No idea why but emscripten will complain about a missing destructor when
-	// using virtual here
 	virtual
-#endif
 	~Game_Interpreter();
 
 	void Clear();

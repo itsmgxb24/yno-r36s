@@ -22,9 +22,6 @@
 
 #include "native/yno_platform.h"
 
-#ifdef __EMSCRIPTEN__
-#  include <emscripten.h>
-#endif
 #ifdef EP_WEBLIKE_FS
 #  include <lcf/reader_util.h>
 #  include <nlohmann/json.hpp>
@@ -81,80 +78,7 @@ namespace {
 		return std::make_shared<int>(next_id++);
 	}
 
-#ifdef __EMSCRIPTEN__
-	constexpr size_t ASYNC_MAX_RETRY_COUNT{ 16 };
-
-	struct async_download_context {
-		std::string url, file, param;
-		std::weak_ptr<FileRequestAsync> obj;
-		size_t count;
-
-		async_download_context(
-			std::string u,
-			std::string f,
-			std::string p,
-			FileRequestAsync* o
-		) : url{ std::move(u) }, file{ std::move(f) }, param{ std::move(p) }, obj{ o->weak_from_this() }, count{} {}
-	};
-
-	void download_success_retry(unsigned, void* userData, const char*) {
-		auto ctx = static_cast<async_download_context*>(userData);
-		auto sobj = ctx->obj.lock();
-		// in case that object got deleted
-		if (sobj)
-			sobj->DownloadDone(true);
-		delete ctx;
-	}
-
-	void start_async_wget_with_retry(async_download_context* ctx);
-
-	void download_failure_retry(unsigned, void* userData, int status) {
-		auto ctx = static_cast<async_download_context*>(userData);
-		++ctx->count;
-		bool flag1 = ctx->count >= ASYNC_MAX_RETRY_COUNT;
-		bool flag2 = status >= 400;
-		auto sobj = ctx->obj.lock();
-		std::string_view download_path{ (sobj) ? sobj->GetPath() : "(deleted)" };
-		if (flag1 || flag2) {
-			if (flag1)
-				Output::Warning("DL Failure: max retries exceeded: {}", download_path);
-			else if (flag2)
-				Output::Warning("DL Failure: file not available: {}", download_path);
-
-			if (sobj)
-				sobj->DownloadDone(false);
-			delete ctx;
-			return;
-		}
-		Output::Debug("DL Failure: {}. Retrying", download_path);
-		start_async_wget_with_retry(ctx);
-	}
-
-	void start_async_wget_with_retry(async_download_context* ctx) {
-		emscripten_async_wget2(
-			ctx->url.data(),
-			ctx->file.data(),
-			"GET",
-			ctx->param.data(),
-			ctx,
-			download_success_retry,
-			download_failure_retry,
-			nullptr
-		);
-	}
-
-	void async_wget_with_retry(
-		std::string url,
-		std::string file,
-		std::string param,
-		FileRequestAsync* obj
-	) {
-		// ctx will be deleted when download succeeds
-		auto ctx = new async_download_context{ url, file, param, obj };
-		start_async_wget_with_retry(ctx);
-	}
-
-#elif defined(YNO_NATIVE)
+#ifdef YNO_NATIVE
 	// downloads on a worker thread, the result comes back on the main thread
 	void async_wget_with_retry(std::string url, std::string file, std::string, FileRequestAsync* obj) {
 		std::weak_ptr<FileRequestAsync> weak = obj->weak_from_this();
@@ -177,13 +101,13 @@ void AsyncHandler::CreateRequestMapping(const std::string& file) {
 #ifdef EP_WEBLIKE_FS
 	auto f = FileFinder::Game().OpenInputStream(file);
 	if (!f) {
-		Output::Error("Emscripten: Reading index.json failed");
+		Output::Error("Reading index.json failed");
 		return;
 	}
 
 	json j = json::parse(f, nullptr, false);
 	if (j.is_discarded()) {
-		Output::Error("Emscripten: index.json is not a valid JSON file");
+		Output::Error("index.json is not a valid JSON file");
 		return;
 	}
 
@@ -306,23 +230,9 @@ bool AsyncHandler::IsFilePending(bool important, bool graphic) {
 }
 
 void AsyncHandler::SaveFilesystem() {
-#ifdef __EMSCRIPTEN__
-	// Save changed file system
-	EM_ASM({
-		FS.syncfs(function(err) {});
-	});
-#endif
 }
 
 void AsyncHandler::SaveFilesystem(int slot_id) {
-#ifdef __EMSCRIPTEN__
-	// Save changed file system
-	EM_ASM({
-		FS.syncfs(function(err) {
-			onSaveSlotUpdated($0);
-		});
-	}, slot_id);
-#endif
 }
 
 bool AsyncHandler::IsImportantFilePending() {
@@ -376,21 +286,7 @@ void FileRequestAsync::Start() {
 
 #ifdef EP_WEBLIKE_FS
 	std::string request_path;
-#  if defined(YNO_NATIVE)
 	request_path = YnoNet::GetConfig().data_url + YnoNet::GetConfig().game_id + "/";
-#  else
-#    ifdef EM_GAME_URL
-	request_path = EM_GAME_URL;
-#    else
-	request_path = "games/";
-#    endif
-
-	if (!Player::emscripten_game_name.empty()) {
-		request_path += Player::emscripten_game_name + "/";
-	} else {
-		request_path += "default/";
-	}
-#  endif
 
 	std::string modified_path;
 	if (index_version >= 2) {

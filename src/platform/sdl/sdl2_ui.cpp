@@ -28,11 +28,6 @@
 #elif defined(__ANDROID__)
 #  include <jni.h>
 #  include <SDL_system.h>
-#elif defined(__EMSCRIPTEN__)
-#  include <emscripten.h>
-#  ifdef SUPPORT_AUDIO_WORKLET
-#    include "platform/emscripten/audio.h"
-#  endif
 #elif defined(__WIIU__)
 #  include "platform/wiiu/main.h"
 #endif
@@ -172,11 +167,6 @@ Sdl2Ui::Sdl2Ui(long width, long height, const Game_Config& cfg) : BaseUi(cfg)
 	// Set the application class name
 	setenv("SDL_VIDEO_X11_WMCLASS", GAME_TITLE, 0);
 #endif
-#ifdef __EMSCRIPTEN__
-	SDL_SetHint(SDL_HINT_EMSCRIPTEN_ASYNCIFY, "0");
-	// Only handle keyboard events when the canvas has focus
-	SDL_SetHint(SDL_HINT_EMSCRIPTEN_KEYBOARD_ELEMENT, "#canvas");
-#endif
 
 	if (SDL_Init(SDL_INIT_VIDEO) < 0) {
 		Output::Error("Couldn't initialize SDL.\n{}\n", SDL_GetError());
@@ -207,15 +197,6 @@ Sdl2Ui::Sdl2Ui(long width, long height, const Game_Config& cfg) : BaseUi(cfg)
 #ifdef SUPPORT_AUDIO
 #  ifdef AUDIO_AESND
 		audio_ = std::make_unique<WiiAudio>(cfg.audio);
-#  elif defined(SUPPORT_AUDIO_WORKLET)
-		// The worklet shares memory with its threads, which the browser only permits
-		// on a cross-origin isolated page
-		if (EmscriptenAudio::Supported()) {
-			audio_ = std::make_unique<EmscriptenAudio>(cfg.audio);
-		} else {
-			Output::Debug("Audio: page is not cross-origin isolated, falling back to SDL2");
-			audio_ = std::make_unique<Sdl2Audio>(cfg.audio);
-		}
 #  else
 		audio_ = std::make_unique<Sdl2Audio>(cfg.audio);
 #  endif
@@ -329,7 +310,7 @@ void Sdl2Ui::EndDisplayModeChange() {
 			}
 
 			current_display_mode.effective = true;
-#if defined(__EMSCRIPTEN__) || defined(__PS4__)
+#ifdef __PS4__
 			SetIsFullscreen(true);
 #else
 			SetIsFullscreen((current_display_mode.flags & SDL_WINDOW_FULLSCREEN_DESKTOP) == SDL_WINDOW_FULLSCREEN_DESKTOP);
@@ -360,7 +341,7 @@ bool Sdl2Ui::RefreshDisplayMode() {
 		SDL_SetHint(SDL_HINT_RENDER_DRIVER, "opengl");
 		#endif
 
-		#if defined(__EMSCRIPTEN__) || defined(_WIN32)
+		#ifdef _WIN32
 		// FIXME: This will not DPI-scale on Windows due to SDL2 limitations.
 		// Is properly fixed in SDL3. See #2764
 		flags |= SDL_WINDOW_ALLOW_HIGHDPI;
@@ -387,11 +368,6 @@ bool Sdl2Ui::RefreshDisplayMode() {
 		}
 
 		SDL_GetWindowSize(sdl_window, &window.width, &window.height);
-		#ifdef __EMSCRIPTEN__
-		double display_ratio = emscripten_get_device_pixel_ratio();
-		window.width = static_cast<int>(window.width * display_ratio);
-		window.height = static_cast<int>(window.height * display_ratio);
-		#endif
 		window.size_changed = true;
 
 		auto window_sg = lcf::makeScopeGuard([&]() {
@@ -459,8 +435,7 @@ bool Sdl2Ui::RefreshDisplayMode() {
 		renderer_sg.Dismiss();
 		window_sg.Dismiss();
 	} else {
-		// Browser handles fast resizing for emscripten, TODO: use fullscreen API
-#if !defined(__EMSCRIPTEN__) && !defined(__PS4__)
+#ifndef __PS4__
 		bool is_fullscreen = (flags & SDL_WINDOW_FULLSCREEN_DESKTOP) == SDL_WINDOW_FULLSCREEN_DESKTOP;
 		if (is_fullscreen) {
 			SDL_SetWindowFullscreen(sdl_window, SDL_WINDOW_FULLSCREEN_DESKTOP);
@@ -850,11 +825,6 @@ void Sdl2Ui::ProcessWindowEvent(SDL_Event &evnt) {
 		window.width = evnt.window.data1;
 		window.height = evnt.window.data2;
 
-#ifdef __EMSCRIPTEN__
-		double display_ratio = emscripten_get_device_pixel_ratio();
-		window.width = static_cast<int>(window.width * display_ratio);
-		window.height = static_cast<int>(window.height * display_ratio);
-#endif
 
 		window.size_changed = true;
 	}
@@ -904,14 +874,8 @@ void Sdl2Ui::ProcessMouseMotionEvent(SDL_Event& evnt) {
 		return;
 	}
 
-#ifdef __EMSCRIPTEN__
-	double display_ratio = emscripten_get_device_pixel_ratio();
-	mouse_pos.x = (evnt.motion.x * display_ratio - viewport.x) * main_surface->width() / xw;
-	mouse_pos.y = (evnt.motion.y * display_ratio - viewport.y) * main_surface->height() / yh;
-#else
 	mouse_pos.x = (evnt.motion.x - viewport.x) * main_surface->width() / xw;
 	mouse_pos.y = (evnt.motion.y - viewport.y) * main_surface->height() / yh;
-#endif
 
 #else
 	/* unused */
@@ -1044,14 +1008,8 @@ void Sdl2Ui::ProcessFingerEvent(SDL_Event& evnt) {
 			return;
 		}
 
-#ifdef __EMSCRIPTEN__
-		double display_ratio = emscripten_get_device_pixel_ratio();
-		int x = (evnt.tfinger.x * display_ratio - viewport.x) * main_surface->width() / xw;
-		int y = (evnt.tfinger.y * display_ratio - viewport.y) * main_surface->height() / yh;
-#else
 		int x = (evnt.tfinger.x - viewport.x) * main_surface->width() / xw;
 		int y = (evnt.tfinger.y - viewport.y) * main_surface->height() / yh;
-#endif
 
 		fi->Down(evnt.tfinger.fingerId, x, y);
 	} else if (evnt.type == SDL_FINGERUP) {
@@ -1290,9 +1248,7 @@ int FilterUntilFocus(const SDL_Event* evnt) {
 }
 
 void Sdl2Ui::vGetConfig(Game_ConfigVideo& cfg) const {
-#ifdef __EMSCRIPTEN__
-	cfg.renderer.Lock("SDL2 (Software, Emscripten)");
-#elif defined(__wii__)
+#if defined(__wii__)
 	cfg.renderer.Lock("SDL2 (Software, Wii)");
 #elif defined(__WIIU__)
 	cfg.renderer.Lock("SDL2 (Software, Wii U)");
@@ -1324,16 +1280,7 @@ void Sdl2Ui::vGetConfig(Game_ConfigVideo& cfg) const {
 	cfg.window_zoom.Set(current_display_mode.zoom);
 	cfg.fullscreen.Set(IsFullscreen());
 
-#ifdef __EMSCRIPTEN__
-	// Fullscreen is handled by the browser
-	cfg.fullscreen.SetOptionVisible(false);
-	cfg.fps_limit.SetOptionVisible(false);
-	cfg.window_zoom.SetOptionVisible(false);
-	// Toggling this freezes the web player
-	cfg.vsync.SetOptionVisible(false);
-	cfg.pause_when_focus_lost.Lock(false);
-	cfg.pause_when_focus_lost.SetOptionVisible(false);
-#elif defined(__wii__)
+#if defined(__wii__)
 	cfg.fullscreen.SetOptionVisible(false);
 #elif defined(__WIIU__)
 	// Only makes the screen flicker

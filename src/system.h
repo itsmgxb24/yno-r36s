@@ -44,11 +44,6 @@
 #  define SUPPORT_JOYSTICK
 #  define SUPPORT_JOYSTICK_AXIS
 #  define SUPPORT_TOUCH
-#elif defined(__EMSCRIPTEN__)
-#  define SUPPORT_MOUSE
-#  define SUPPORT_TOUCH
-#  define SUPPORT_JOYSTICK
-#  define SUPPORT_JOYSTICK_AXIS
 #elif defined(__3DS__)
 #  define SUPPORT_JOYSTICK
 #  define SUPPORT_JOYSTICK_AXIS

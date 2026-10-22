@@ -160,17 +160,6 @@ void Window_GameList::DrawItem(int index) {
 
 void Window_GameList::DrawErrorText(bool show_dotdot) {
 	std::vector<std::string> error_msg = {
-#ifdef __EMSCRIPTEN__
-		"Did you type in a wrong URL?",
-		"",
-		"If you think this is an error, contact the owner",
-		"of this website.",
-		"",
-		"Technical information: index.json was not found.",
-		"",
-		"Ensure through the dev tools of your browser that",
-		"the file is at the correct location.",
-#else
 		"With EasyRPG Player you can play games created",
 		"with RPG Maker 2000 and RPG Maker 2003.",
 		"",
@@ -179,16 +168,11 @@ void Window_GameList::DrawErrorText(bool show_dotdot) {
 		"",
 		"Newer engines such as RPG Maker XP, VX, MV and MZ",
 		"are not supported."
-#endif
 	};
 
 	int y = (show_dotdot ? 4 + 14 : 0);
 
-#ifdef __EMSCRIPTEN__
-	contents->TextDraw(0, y, Font::ColorKnockout, "The game was not found.");
-#else
 	contents->TextDraw(0, y, Font::ColorKnockout, "No games found in the current directory.");
-#endif
 
 	y += 14 * 2;
 	for (size_t i = 0; i < error_msg.size(); ++i) {

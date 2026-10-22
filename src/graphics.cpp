@@ -76,9 +76,6 @@ void Graphics::UpdateTitle() {
 		return;
 	}
 
-#ifdef __EMSCRIPTEN__
-	return;
-#else
 	std::string fps;
 	if (DisplayUi->ShowFpsOnTitle()) {
 		fps += fps_overlay->GetFpsString();
@@ -101,7 +98,6 @@ void Graphics::UpdateTitle() {
 	DisplayUi->SetTitle(title.str());
 
 	window_title_key = (Player::game_title + fps);
-#endif
 }
 
 void Graphics::Draw(Bitmap& dst) {

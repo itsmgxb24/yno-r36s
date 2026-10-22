@@ -13,7 +13,7 @@ the browser had to be replaced.
 | --- | --- | --- |
 | Game files | Emscripten FS, `emscripten_async_wget2` | normal directory, libcurl worker threads (`src/native/yno_net.*`, `src/async_handler.cpp`) |
 | Room socket (`/room`) | Emscripten WebSocket | libcurl WebSocket (`src/native/yno_ws.*`, `src/multiplayer/yno_connection.cpp`) |
-| JavaScript bridge | `src/web_api.cpp` | `src/native/web_api_native.cpp` |
+| JavaScript bridge | `src/web_api.cpp` (removed here) | `src/native/web_api_native.cpp` |
 | Chat, player counter | `chat.js`, `session.js` (website) | `src/native/yno_session.*` (session socket) + `src/native/yno_overlay.*` (chat drawn in the engine) |
 | Choosing a game | the hub page | `src/native/scene_yno_games.*`: a plain text menu of the 25 games with the players online, and per game *Download all files* / *Verify files* / *Re-download files* (`src/native/yno_games.*`) |
 | Download progress | none (the browser shows its own) | a bar below the middle of the screen (`src/native/yno_overlay.*`) |
@@ -23,9 +23,9 @@ File names are percent-encoded before they are requested (`YnoNet::EncodeUrl`): 
 
 A file that is already on the card is not requested again (`async_handler.cpp`): the browser starts with an empty file system, the handheld does not, and replacing files while the game runs made them disappear for a moment.
 
-Everything is behind `-DPLAYER_YNO_NATIVE=ON` / `YNO_NATIVE`; the Emscripten build is untouched.
-`EP_WEBLIKE_FS` (`src/native/yno_platform.h`) marks the places where the engine assumes lazily
-downloaded files, as on the web.
+This fork builds only the native client (`-DPLAYER_YNO_NATIVE=ON`, defines `YNO_NATIVE`); the browser
+(Emscripten) build of upstream was removed. `EP_WEBLIKE_FS` (`src/native/yno_platform.h`) marks the places
+where the engine assumes lazily downloaded files, as it did on the web.
 
 ## Status
 

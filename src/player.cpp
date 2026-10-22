@@ -36,8 +36,6 @@
 #ifdef _WIN32
 #  include "platform/windows/utils.h"
 #  include <windows.h>
-#elif defined(__EMSCRIPTEN__)
-#  include <emscripten.h>
 #endif
 
 #include "async_handler.h"
@@ -144,9 +142,6 @@ namespace Player {
 	int rng_seed = -1;
 	Game_ConfigPlayer player_config;
 	Game_ConfigGame game_config;
-#ifdef __EMSCRIPTEN__
-	std::string emscripten_game_name;
-#endif
 	Game_Clock::time_point last_auto_screenshot;
 }
 
@@ -241,8 +236,7 @@ void Player::Run() {
 	Game_Clock::ResetFrame(Game_Clock::now());
 
 	// Main loop
-#if defined(USE_LIBRETRO) || defined(__EMSCRIPTEN__)
-	// emscripten implemented in main.cpp
+#ifdef USE_LIBRETRO
 	// libretro invokes the MainLoop through a retro_run-callback
 #else
 	while (Transition::instance().IsActive() || (Scene::instance && Scene::instance->type != Scene::Null)) {
@@ -474,17 +468,6 @@ void Player::Exit() {
 	}
 
 	Graphics::UpdateSceneCallback();
-#ifdef __EMSCRIPTEN__
-	BitmapRef surface = DisplayUi->GetDisplaySurface();
-	std::string message = "It's now safe to turn off\n      your browser.";
-	DisplayUi->CleanDisplay();
-	surface->FillRect(surface->GetRect(), Color(0, 0, 0, 255));
-	Text::Draw(*surface, 84, DisplayUi->GetHeight() / 2 - 16, *Font::DefaultBitmapFont(), Color(221, 123, 64, 255), message);
-	DisplayUi->UpdateDisplay();
-
-	auto ret = FileFinder::Root().OpenOutputStream("/tmp/message.png", std::ios_base::binary | std::ios_base::out | std::ios_base::trunc);
-	if (ret) Output::TakeScreenshot(ret);
-#endif
 	Player::ResetGameObjects();
 	Font::Dispose();
 	Graphics::Quit();
@@ -746,14 +729,6 @@ Game_Config Player::ParseCommandLine() {
 			exit(0);
 			break;
 		}*/
-#ifdef __EMSCRIPTEN__
-		if (cp.ParseNext(arg, 1, "--game")) {
-			if (arg.NumValues() > 0) {
-				emscripten_game_name = arg.Value(0);
-			}
-			continue;
-		}
-#endif
 #ifdef YNO_NATIVE
 		if (cp.ParseNext(arg, 1, "--yno-game")) {
 			if (arg.NumValues() > 0) YnoNet::GetConfig().game_id = arg.Value(0);

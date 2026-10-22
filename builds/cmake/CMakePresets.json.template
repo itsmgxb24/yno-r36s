@@ -70,17 +70,6 @@
 			"easyrpg_platforms": ["sdl3", "sdl2", "libretro"]
 		},
 		{
-			"name": "emscripten",
-			"displayName": "Emscripten Web",
-			"toolchainFile": "$env{EASYRPG_BUILDSCRIPTS}/emscripten/emsdk-portable/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake",
-			"cacheVariables": {
-				"PLAYER_PREFIX_PATH_APPEND": "$env{EASYRPG_BUILDSCRIPTS}/emscripten",
-				"PLAYER_FIND_ROOT_PATH_APPEND": "ON",
-				"PLAYER_JS_BUILD_SHELL": "ON"
-			},
-			"easyrpg_platforms": ["sdl3", "sdl2", "yno", "yno-simd", "yno-worklet"]
-		},
-		{
 			"name": "android-armeabi-v7a",
 			"displayName": "Android armeabi-v7a",
 			"cacheVariables": {

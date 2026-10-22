@@ -1,12 +1,10 @@
-> **R36S fork:** this branch adds a native YNOproject client for the R36S handheld (no browser).
-> See [`r36s/README.md`](r36s/README.md).
+# YNOproject native client for the R36S
 
-# EasyRPG Player online fork
-
-Adds multiplayer functionality. 
-
-Builds for the emscripten target only.
-
+A native (no browser) client for [YNOproject](https://ynoproject.net) games on the R36S handheld.
+It is a fork of [ynoproject/ynoengine](https://github.com/ynoproject/ynoengine), the EasyRPG Player
+fork with multiplayer that the website runs in the browser. This fork builds only the native client;
+the browser (Emscripten) build was removed. See [`r36s/README.md`](r36s/README.md) for what it does,
+how to build it and how to install it.
 
 Server: https://github.com/ynoproject/ynoserver
 
@@ -37,7 +35,8 @@ Documentation is available at the documentation wiki: https://wiki.easyrpg.org
 - libxmp for tracker music support.
 - SpeexDSP or libsamplerate for proper audio resampling.
 - lhasa for LHA (.lzh) archive support.
-- nlohmann_json for processing JSON files (required when targeting Emscripten)
+- nlohmann_json for processing JSON files (required: index.json of the games)
+- libcurl for HTTP and WebSocket (the YNO native client)
 
 The older SDL version 1.2 is still supported, but deprecated.
 Please do not add new platform code for this library.
@@ -64,52 +63,7 @@ https://easyrpg.org/downloads/player/
 
 ## Building
 
-Follow these steps:
-
-1) Download required tools and dependencies for ynoclient.
-    - cmake 3.10 or higher
-    - meson & ninja (You'll need python3-pip package to install meson build system)
-    - automake
-    - autoconf
-    - libtool
-    - m4
-
-2) Set up emscripten toolchain
-
-```
-cd
-mkdir workdir
-cd workdir
-git clone https://github.com/EasyRPG/buildscripts
-cd buildscripts
-cd emscripten
-./0_build_everything.sh
-cd emsdk-portable
-source ./emsdk_env.sh
-```
-
-3) Build liblcf
-```
-cd ~/workdir
-git clone https://github.com/EasyRPG/liblcf
-cd liblcf
-export EM_PKG_CONFIG_PATH=$HOME/workdir/buildscripts/emscripten/lib/pkgconfig
-autoreconf -fi
-emconfigure ./configure --prefix=$HOME/workdir/buildscripts/emscripten --disable-shared
-make install
-```
-
-4) Build ynoclient
-```
-cd ~/workdir
-git clone https://github.com/ynoproject/ynoclient
-cd ynoclient
-./cmake_build.sh
-cd build
-ninja
-```
-
-The files you want are build/index.wasm and build/index.js
+The client is cross-built for the R36S in a podman container: see [`r36s/README.md`](r36s/README.md).
 
 ## Source files of interest
 Check the [initial commit.](https://github.com/ynoproject/ynoclient/commit/218c56586b598a9e3889ed74cd606ed699d159ca)
@@ -150,8 +104,6 @@ EasyRPG Player makes use of the following 3rd party software:
   ttyp0 license
 * [WenQuanYi] font family (CJK) - Copyright (c) 2004-2010 WenQuanYi Project
   Contributors provided under the GPLv2 or later with Font Exception
-* [Teenyicons] Tiny minimal 1px icons - Copyright (c) 2020 Anja van Staden,
-  provided under the MIT license (only used by the Emscripten web shell)
 
 [liblcf]: https://github.com/EasyRPG/liblcf
 [BUILDING document]: docs/BUILDING.md
@@ -166,4 +118,3 @@ EasyRPG Player makes use of the following 3rd party software:
 [Shinonome]: http://openlab.ring.gr.jp/efont/shinonome
 [ttyp0]: https://people.mpi-inf.mpg.de/~uwe/misc/uw-ttyp0
 [WenQuanYi]: http://wenq.org
-[Teenyicons]: https://github.com/teenyicons/teenyicons
