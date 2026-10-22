@@ -38,7 +38,7 @@ You can download the client from our [releases](https://github.com/itsmgxb24/yno
 
 ### Save sync setup
 
-Log in on ynoproject.net in a PC browser and open the developer tools (F12). Select Storage, then Cookies, and click on `https://ynoproject.org`.
+Log in on ynoproject.net in a PC browser and open the developer tools (F12). Select Storage, then Cookies, and click on `https://ynoproject.net`.
 copy the value of the `auth` cookie and put it into `ports/yno-native/yno.conf` on your SD card.
 
 Only slot 1 is synchronised, this is a limitation of the YNO server and wont be changed.
