@@ -52,6 +52,16 @@ namespace {
 		return "...";
 	}
 
+	// "85 KB/s", "1.2 MB/s"; empty until the first measurement
+	std::string FormatSpeed(double bytes_per_sec) {
+		if (bytes_per_sec <= 0) return std::string();
+		if (bytes_per_sec >= 1024 * 1024) {
+			int tenths = static_cast<int>(bytes_per_sec / (1024 * 1024) * 10);
+			return std::to_string(tenths / 10) + "." + std::to_string(tenths % 10) + " MB/s";
+		}
+		return std::to_string(static_cast<int>(bytes_per_sec / 1024)) + " KB/s";
+	}
+
 	std::vector<std::string> Wrap(const Font& font, const std::string& text, int width, const std::string& indent) {
 		std::vector<std::string> lines;
 		std::string line;
@@ -128,7 +138,12 @@ namespace {
 			if (!count.empty()) {
 				Text::Draw(dst, x + kW - 8 - count_w, y + 4, *font, Color(255, 255, 255, 255), count);
 			}
-			Text::Draw(dst, x + 8, y + 17, *font, Color(150, 150, 150, 255), Fit(*font, p.current, kW - 16));
+			std::string speed = FormatSpeed(p.bytes_per_sec);
+			int speed_w = speed.empty() ? 0 : Text::GetSize(*font, speed).width + 8;
+			Text::Draw(dst, x + 8, y + 17, *font, Color(150, 150, 150, 255), Fit(*font, p.current, kW - 16 - speed_w));
+			if (!speed.empty()) {
+				Text::Draw(dst, x + kW - 8 - (speed_w - 8), y + 17, *font, Color(200, 200, 200, 255), speed);
+			}
 
 			// the bar: an outline and a fill
 			const int bx = x + 8, by = y + 33, bw = kW - 16, bh = 6;

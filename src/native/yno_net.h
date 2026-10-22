@@ -80,6 +80,7 @@ namespace YnoNet {
 		std::string current;       // name of the file that was started last
 		int done = 0;
 		int total = 0;
+		double bytes_per_sec = 0;  // download speed of the last few seconds, 0 = not measured yet
 	};
 	Progress GetProgress();
 

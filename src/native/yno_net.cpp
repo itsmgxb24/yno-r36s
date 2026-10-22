@@ -49,6 +49,15 @@ namespace {
 	std::string batch_label;
 	std::atomic<bool> batch_cancelled{false};
 
+	// download speed: worker threads count the bytes they receive, Poll() turns them into a rate
+	using Clock = std::chrono::steady_clock;
+	std::atomic<unsigned long long> bytes_received{0};
+	bool meter_active = false;       // main thread only
+	Clock::time_point meter_start, meter_last;
+	unsigned long long meter_start_bytes = 0, meter_last_bytes = 0;
+	double meter_speed = 0;          // bytes per second, smoothed
+	int meter_ticks = 0;
+
 	// One libcurl handle per worker thread: it keeps the connection (and the TLS session) open
 	// between files, which matters a lot on a slow link.
 	struct ThreadHandle {
@@ -92,6 +101,7 @@ namespace {
 	}
 
 	size_t WriteToFile(char* ptr, size_t size, size_t nmemb, void* userdata) {
+		bytes_received += size * nmemb;
 		return fwrite(ptr, size, nmemb, static_cast<FILE*>(userdata));
 	}
 
@@ -172,6 +182,46 @@ namespace {
 		return rc == CURLE_OK;
 	}
 
+	// Once per frame: the speed of the last seconds (smoothed), and a log line when a transfer ends.
+	void UpdateMeter() {
+		const bool active = batch_active || pending > 0;
+		if (!active && !meter_active) {
+			return;
+		}
+		const auto now = Clock::now();
+		const unsigned long long total = bytes_received;
+		if (active && !meter_active) {
+			meter_active = true;
+			meter_start = meter_last = now;
+			meter_start_bytes = meter_last_bytes = total;
+			meter_speed = 0;
+			meter_ticks = 0;
+			return;
+		}
+		if (!active) {
+			meter_active = false;
+			meter_speed = 0;
+			const long long secs = std::chrono::duration_cast<std::chrono::seconds>(now - meter_start).count();
+			const long long kb = static_cast<long long>((total - meter_start_bytes) / 1024);
+			if (secs >= 3 && kb > 0) {   // single files the game asks for are not worth a line
+				Output::Info("net: {} KB in {} s = {} KB/s on average", kb, secs, kb / secs);
+			}
+			return;
+		}
+		const double dt = std::chrono::duration<double>(now - meter_last).count();
+		if (dt < 1.0) {
+			return;
+		}
+		const double rate = static_cast<double>(total - meter_last_bytes) / dt;
+		meter_speed = meter_speed > 0 ? 0.6 * meter_speed + 0.4 * rate : rate;
+		meter_last = now;
+		meter_last_bytes = total;
+		if (++meter_ticks % 5 == 0) {
+			Output::Debug("net: {} KB/s ({} files done)", static_cast<long long>(meter_speed / 1024),
+					batch_active ? batch_done : lazy_done);
+		}
+	}
+
 	std::string BaseName(const std::string& path) {
 		auto slash = path.find_last_of('/');
 		return slash == std::string::npos ? path : path.substr(slash + 1);
@@ -210,6 +260,7 @@ void Shutdown() {
 }
 
 void Poll() {
+	UpdateMeter();
 	for (;;) {
 		std::function<void()> fn;
 		{
@@ -325,6 +376,7 @@ void CheckFile(std::string url, std::string dest_path, bool force, CheckFn on_do
 Progress GetProgress() {
 	Progress p;
 	p.current = current_name;
+	p.bytes_per_sec = meter_speed;
 	if (batch_active) {
 		p.active = true;
 		p.batch = true;
