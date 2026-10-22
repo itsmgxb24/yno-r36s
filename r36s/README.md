@@ -33,7 +33,9 @@ Verified on a PC (the aarch64 binary under qemu, with a dummy video driver) agai
 game data download, the Yume Nikki and .flow title screens, the game list with online counts, the
 session socket and live chat messages.
 
-**Not verified on the device yet:** KMSDRM video, audio, the gamepad, speed, memory use.
+Verified on the device by the owner: Yume Nikki plays well with the hardware renderer and the gamepad (RSS
+46-114 MB), downloads work. Internet through the ESP32-C3 gives about 200 KB/s; see `NOTES.md` for what was found
+and what is still open (USB tethering from a phone does not work, faster links, a menu bug that may be fixed).
 
 Not done: other players on the map (needs the room key, see below), player list / parties / friends,
 badges / rankings / locations, login with an on-screen keyboard and save synchronisation.
@@ -55,7 +57,7 @@ r36s/build/setup-container.sh [podman storage dir]
 podman exec yno-dev /work/r36s/build/build.sh     # -> ~/yno-build-out/yno-r36s (7 MB)
 ```
 
-All runtime libraries it needs are already present on dArkOS.
+All runtime libraries it needs are already present on dArkOS. Hand-over notes, test hooks and open items: `r36s/NOTES.md`.
 
 ## Installing on the card
 
