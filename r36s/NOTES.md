@@ -60,7 +60,8 @@ r36s/deploy.sh /run/media/$USER/EASYROMS/ports           # the card must be moun
 6. **Save sync (slot 1, like the website)** is in `src/native/yno_savesync.*`: checked from the game list before a game
    starts (conflict screen when both sides changed), uploaded after each save into slot 1. Needs `AUTH`; `SAVESYNC=0`
    switches it off. `.savesync` in the game directory remembers the last agreed server timestamp and save hash (the
-   console clock is not trusted). Tested headless against a stand-in server; not yet on the device with a real account.
+   console clock is not trusted). Verified by the owner on 2026-10-22 with a real account, both ways (website to
+   console and back). Other slots stay local: the server holds only one save per account.
    A game started directly (`run.sh <game>`) skips the check and so never uploads.
 
 ## Not in git
