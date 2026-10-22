@@ -64,8 +64,16 @@ r36s/deploy.sh /run/media/$USER/EASYROMS/ports
 ```
 
 Then start **Ports -> Yume Nikki Online (native)**. See `r36s/device/yno-native/README.txt` (Polish) for
-controls and settings. The launcher connects through the ESP32 PPP link if there is no internet, sets the
-clock from the server, and quits on Select+Start (gptokeyb).
+controls and settings. If there is no internet the launcher first looks for a phone with USB tethering / a USB Ethernet adapter
+(`usb-tether/usb-tether.sh`, also a separate **Ports -> USB Tethering** entry), then for the ESP32 PPP link. It
+sets the clock from the server and quits on Select+Start (gptokeyb).
+
+### Internet over USB tethering
+
+The stock kernel (4.4.189) already has `rndis_host`, `cdc_ncm`, `cdc_ether` and the usual USB Ethernet
+drivers as modules, so an **Android** phone with *USB tethering* ON works without a kernel rebuild (an iPhone
+would need `ipheth`, which is not built). NetworkManager normally configures the new interface; the script
+falls back to `nmcli device connect` and `dhcpcd`. Both scripts leave a log in `usb-tether/last-run.log`.
 
 ## Development aids
 

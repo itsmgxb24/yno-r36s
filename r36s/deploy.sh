@@ -19,6 +19,9 @@ else
     cp "$HERE"/device/yno-native/{run.sh,quit.gptk,README.txt,yno.conf} "$PORTS/yno-native/"
 fi
 cp "$BIN" "$PORTS/yno-native/yno-r36s"
-chmod +x "$PORTS/Yume Nikki Online (native).sh" "$PORTS/yno-native/run.sh" "$PORTS/yno-native/yno-r36s"
+mkdir -p "$PORTS/usb-tether"
+cp "$HERE/device/USB Tethering.sh" "$PORTS/"
+cp "$HERE/device/usb-tether/usb-tether.sh" "$PORTS/usb-tether/"
+chmod +x "$PORTS/USB Tethering.sh" "$PORTS/usb-tether/usb-tether.sh" "$PORTS/Yume Nikki Online (native).sh" "$PORTS/yno-native/run.sh" "$PORTS/yno-native/yno-r36s"
 sync
 echo "deployed to $PORTS"

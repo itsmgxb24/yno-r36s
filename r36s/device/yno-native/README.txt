@@ -34,7 +34,7 @@ CO DZIALA
 - zapisy lokalne: yno-native/games/yume/SaveXX.lsd (widoczne z komputera)
 - polaczenie z serwerem sesji: licznik graczy, czat (odczyt): ostatnie wiadomosci pojawiaja sie na
   dole ekranu na kilka sekund (ustawienie CHAT_PINNED=1 w yno.conf trzyma je caly czas)
-- automatyczne laczenie z internetem przez ESP32, ustawienie zegara
+- automatyczne laczenie z internetem: telefon z "Tethering USB" (Android) albo ESP32, ustawienie zegara
 
 CZEGO JESZCZE NIE MA (kolejne etapy)
 ------------------------------------
@@ -71,3 +71,4 @@ PLIKI
   yno-native/yno.conf                ustawienia
   yno-native/games/<gra>/            pobrane dane gry i zapisy
   yno-native/last-run.log            log ostatniego uruchomienia
+  USB Tethering.sh, usb-tether/      internet z telefonu przez USB (wlacz Tethering USB w telefonie, potem uruchom)

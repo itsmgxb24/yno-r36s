@@ -7,7 +7,8 @@
 # Game files are downloaded on demand into yno-native/games/<id>/ (saves go there too, so they are
 # visible from a PC). Back to the list: Start (settings) -> Exit. Quit: Select + Start.
 # Settings: yno-native/yno.conf.
-# If there is no internet it connects through the ESP32 first (../esp32-internet/).
+# If there is no internet it first looks for a phone with USB tethering (../usb-tether/), then the ESP32
+# (../esp32-internet/).
 
 export PATH="$PATH:/usr/sbin:/sbin:/usr/local/sbin:/usr/local/bin"
 
@@ -21,6 +22,7 @@ DIR="$(dirname "$APP")"
 LOG="$APP/last-run.log"
 CONF="$APP/yno.conf"
 ESP="$DIR/esp32-internet/r36s-ppp.sh"
+TETHER="$DIR/usb-tether/usb-tether.sh"
 BIN="$APP/yno-r36s"
 GAMES="$APP/games"
 TTY=/dev/tty1
@@ -85,12 +87,16 @@ sync_clock() {      # no RTC: a wrong date breaks HTTPS
 }
 
 say "Checking the internet connection..."
+if ! net_ok && [ -f "$TETHER" ]; then
+    say "No internet - looking for a phone with USB tethering..."
+    bash "$TETHER" start --wait 4
+fi
 if ! net_ok; then
     if [ -f "$ESP" ]; then
         say "No internet - connecting through the ESP32 (up to a minute)..."
         bash "$ESP" start
     fi
-    net_ok || fail "No internet connection. Connect Wi-Fi, or plug in the ESP32 and start again."
+    net_ok || fail "No internet connection. Connect Wi-Fi, switch on USB tethering on a phone, or plug in the ESP32 and start again."
 fi
 sync_clock
 
