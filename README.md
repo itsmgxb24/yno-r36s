@@ -3,8 +3,8 @@
 A native (no browser) client for [YNOproject](https://ynoproject.net) games on the R36S handheld.
 It is a fork of [ynoproject/ynoengine](https://github.com/ynoproject/ynoengine), the EasyRPG Player
 fork with multiplayer that the website runs in the browser. This fork builds only the native client;
-the browser (Emscripten) build was removed. See [`r36s/README.md`](r36s/README.md) for what it does,
-how to build it and how to install it.
+the browser (Emscripten) build was removed. See [`.github/README.md`](.github/README.md) for what it does
+and how to install it, and [`r36s/NOTES.md`](r36s/NOTES.md) for how it works.
 
 Server: https://github.com/ynoproject/ynoserver
 
@@ -63,7 +63,7 @@ https://easyrpg.org/downloads/player/
 
 ## Building
 
-The client is cross-built for the R36S in a podman container: see [`r36s/README.md`](r36s/README.md).
+The client is cross-built for the R36S in a podman container: see [`r36s/NOTES.md`](r36s/NOTES.md).
 
 ## Source files of interest
 Check the [initial commit.](https://github.com/ynoproject/ynoclient/commit/218c56586b598a9e3889ed74cd606ed699d159ca)
