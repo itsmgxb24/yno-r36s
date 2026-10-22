@@ -89,17 +89,21 @@ sync_clock() {      # no RTC: a wrong date breaks HTTPS
     fi
 }
 
-say "Checking the internet connection..."
+# the screen only says "checking"; which link was tried (USB adapter, ESP32) is in the log
+say "Checking for internet..."
 if ! net_ok && [ -f "$TETHER" ]; then
-    say "No internet - looking for a phone with USB tethering..."
+    echo "no internet - trying a USB network adapter / phone tethering"
     bash "$TETHER" start --wait 4
 fi
+if ! net_ok && [ -f "$ESP" ]; then
+    echo "no internet - trying the ESP32 link"
+    bash "$ESP" start
+fi
 if ! net_ok; then
-    if [ -f "$ESP" ]; then
-        say "No internet - connecting through the ESP32 (up to a minute)..."
-        bash "$ESP" start
-    fi
-    net_ok || fail "No internet connection. Connect Wi-Fi, switch on USB tethering on a phone, or plug in the ESP32 and start again."
+    echo "ERROR: no internet connection"
+    say "[FAILED!] Is your console connected to the internet?"
+    sleep 10
+    exit 1
 fi
 sync_clock
 
