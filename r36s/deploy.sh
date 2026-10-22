@@ -14,9 +14,9 @@ mkdir -p "$PORTS/yno-native"
 cp "$HERE/device/Yume Nikki Online (native).sh" "$PORTS/"
 # keep the user's settings, replace everything else
 if [ -f "$PORTS/yno-native/yno.conf" ]; then
-    cp "$HERE"/device/yno-native/{run.sh,quit.gptk,README.txt} "$PORTS/yno-native/"
+    cp "$HERE"/device/yno-native/{run.sh,quit.gptk} "$PORTS/yno-native/"
 else
-    cp "$HERE"/device/yno-native/{run.sh,quit.gptk,README.txt,yno.conf} "$PORTS/yno-native/"
+    cp "$HERE"/device/yno-native/{run.sh,quit.gptk,yno.conf} "$PORTS/yno-native/"
 fi
 cp "$BIN" "$PORTS/yno-native/yno-r36s"
 mkdir -p "$PORTS/usb-tether"

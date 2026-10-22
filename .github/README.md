@@ -50,7 +50,6 @@ The `SAVESYNC=0` turns save file sync off.
 ## More info
 
 - [`r36s/NOTES.md`](../r36s/NOTES.md): current state, testing, open items.
-- [`r36s/device/yno-native/README.txt`](../r36s/device/yno-native/README.txt): controls and settings.
 
 ## Licence
 
