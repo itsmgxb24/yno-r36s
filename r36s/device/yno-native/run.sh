@@ -33,6 +33,8 @@ ROOM_KEY_FILE="$APP/room.key"
 LOG_LEVEL=debug            # debug | info | warning: how much last-run.log says
 VIDEO_DRIVER=""            # empty = automatic (kmsdrm on the handheld); e.g. "offscreen" for tests
 CHAT_PINNED=0              # 1 = keep the chat on screen all the time
+# a release zip ships yno.conf.example, so that unpacking an update never replaces the user's settings
+[ -f "$CONF" ] || cp "$APP/yno.conf.example" "$CONF" 2>/dev/null
 [ -f "$CONF" ] && . "$CONF"
 
 mkdir -p "$GAMES"

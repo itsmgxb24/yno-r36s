@@ -27,19 +27,5 @@ fi
 "${POD[@]}" run -d --name yno-dev --security-opt label=disable \
     -v "$REPO":/work -v "$OUT":/out docker.io/library/debian:trixie-slim sleep infinity
 
-"${POD[@]}" exec yno-dev bash -c '
-set -e
-export DEBIAN_FRONTEND=noninteractive
-dpkg --add-architecture arm64
-apt-get update
-apt-get install -y --no-install-recommends \
-  build-essential cmake ninja-build pkg-config ca-certificates curl git \
-  crossbuild-essential-arm64 \
-  libsdl2-dev:arm64 libpng-dev:arm64 libfreetype-dev:arm64 libharfbuzz-dev:arm64 libpixman-1-dev:arm64 \
-  zlib1g-dev:arm64 libfmt-dev:arm64 libicu-dev:arm64 libexpat1-dev:arm64 libmpg123-dev:arm64 \
-  libvorbis-dev:arm64 libopusfile-dev:arm64 libsndfile1-dev:arm64 libfluidsynth-dev:arm64 \
-  libspeexdsp-dev:arm64 libcurl4-openssl-dev:arm64 libssl-dev:arm64 libinih-dev:arm64 \
-  nlohmann-json3-dev
-apt-get clean
-'
+"${POD[@]}" exec yno-dev bash /work/r36s/build/install-deps.sh
 echo "ready: ${POD[*]} exec yno-dev /work/r36s/build/build.sh   (result: $OUT/yno-r36s)"
