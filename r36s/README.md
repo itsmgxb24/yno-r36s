@@ -15,8 +15,11 @@ the browser had to be replaced.
 | Room socket (`/room`) | Emscripten WebSocket | libcurl WebSocket (`src/native/yno_ws.*`, `src/multiplayer/yno_connection.cpp`) |
 | JavaScript bridge | `src/web_api.cpp` | `src/native/web_api_native.cpp` |
 | Chat, player counter | `chat.js`, `session.js` (website) | `src/native/yno_session.*` (session socket) + `src/native/yno_overlay.*` (chat drawn in the engine) |
-| Choosing a game | the hub page | `src/native/scene_yno_games.*`: the list of the 25 games with the players online |
+| Choosing a game | the hub page | `src/native/scene_yno_games.*`: a plain text menu of the 25 games with the players online, and per game *Verify files* / *Re-download files* (`src/native/yno_games.*`) |
+| Download progress | none (the browser shows its own) | a bar below the middle of the screen (`src/native/yno_overlay.*`) |
 | Controls | keyboard | gamepad mapping in `src/input_buttons_desktop.cpp` (Select never resets the game) |
+
+File names are percent-encoded before they are requested (`YnoNet::EncodeUrl`): the browser does that on its own, libcurl rejects a URL with a space in it, and about 17% of the files of Yume 2kki have a space, brackets or Japanese characters in their name.
 
 Everything is behind `-DPLAYER_YNO_NATIVE=ON` / `YNO_NATIVE`; the Emscripten build is untouched.
 `EP_WEBLIKE_FS` (`src/native/yno_platform.h`) marks the places where the engine assumes lazily

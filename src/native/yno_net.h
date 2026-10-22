@@ -38,6 +38,12 @@ namespace YnoNet {
 	/** Queues a closure for the main thread (the next Poll). Thread-safe. */
 	void PostToMain(std::function<void()> fn);
 
+	/**
+	 * Percent-encodes everything in a URL that is not unreserved, '/' or ':'. The browser does this
+	 * for the web player; libcurl refuses a URL with a space in it (file names have many).
+	 */
+	std::string EncodeUrl(const std::string& url);
+
 	/** Called on the main thread when a download finished: ok + HTTP status (0 = network error). */
 	using DoneFn = std::function<void(bool ok, long http_status)>;
 
@@ -49,6 +55,40 @@ namespace YnoNet {
 
 	/** Number of downloads that are queued or running. */
 	int PendingDownloads();
+
+	enum class CheckResult {
+		Ok,          // the file on the card has the size the server reports
+		Updated,     // it was (re)downloaded
+		NotOnServer, // the server has no such file (404): left alone
+		Failed,      // network error or the download failed
+		Cancelled,   // the batch was cancelled before this file was reached
+	};
+	using CheckFn = std::function<void(CheckResult)>;
+
+	/**
+	 * Compares the size of `dest_path` with what the server reports for `url` (a HEAD request) and
+	 * downloads the file again when it differs. With `force` the file is always downloaded again.
+	 * `on_done` runs on the main thread. The server publishes no checksums, the size is what can be checked.
+	 */
+	void CheckFile(std::string url, std::string dest_path, bool force, CheckFn on_done);
+
+	/** What the progress bar shows. Main thread. */
+	struct Progress {
+		bool active = false;       // something is being transferred
+		bool batch = false;        // an explicit batch (verify / re-download) rather than files the game asked for
+		std::string label;         // batch: "Verifying files"; otherwise "Downloading"
+		std::string current;       // name of the file that was started last
+		int done = 0;
+		int total = 0;
+	};
+	Progress GetProgress();
+
+	/** Starts counting a batch of `total` CheckFile calls. Main thread. */
+	void BeginBatch(const std::string& label, int total);
+	void EndBatch();
+	/** Queued batch jobs finish immediately as Cancelled; running ones complete. */
+	void CancelBatch();
+	bool IsBatchCancelled();
 
 	/** Blocking GET into memory. Worker threads only. */
 	bool HttpGet(const std::string& url, std::string& body, long& http_status, const std::string& cookie = std::string());

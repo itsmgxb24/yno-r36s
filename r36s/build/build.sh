@@ -16,7 +16,8 @@ LIBLCF_COMMIT=6854310c3432e553fd4ae672ce861899c80c3bd0   # the liblcf this was d
 export PKG_CONFIG_LIBDIR=/usr/lib/aarch64-linux-gnu/pkgconfig:/usr/share/pkgconfig
 
 # liblcf is built together with the player; fetch it once, pinned
-if [ ! -e "$SRC/lib/liblcf" ]; then
+if [ ! -d "$SRC/lib/liblcf" ]; then
+    rm -f "$SRC/lib/liblcf"   # a dangling symlink from an older layout would block the clone
     mkdir -p "$SRC/lib"
     git clone https://github.com/EasyRPG/liblcf.git "$SRC/lib/liblcf"
     git -C "$SRC/lib/liblcf" checkout "$LIBLCF_COMMIT"

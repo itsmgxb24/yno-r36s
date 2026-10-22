@@ -20,6 +20,7 @@
 #include "../drawable_mgr.h"
 #include "../font.h"
 #include "../text.h"
+#include "yno_net.h"
 #include "yno_session.h"
 
 namespace {
@@ -38,6 +39,17 @@ namespace {
 		if ((lead >> 4) == 0xE) return 3;
 		if ((lead >> 3) == 0x1E) return 4;
 		return 1;
+	}
+
+	// shortens `text` with "..." until it is at most `width` pixels wide
+	std::string Fit(const Font& font, std::string text, int width) {
+		if (Text::GetSize(font, text).width <= width) return text;
+		while (!text.empty()) {
+			while (!text.empty() && (static_cast<unsigned char>(text.back()) & 0xC0) == 0x80) text.pop_back();
+			if (!text.empty()) text.pop_back();
+			if (Text::GetSize(font, text + "...").width <= width) return text + "...";
+		}
+		return "...";
 	}
 
 	std::vector<std::string> Wrap(const Font& font, const std::string& text, int width, const std::string& indent) {
@@ -75,6 +87,7 @@ namespace {
 				Rebuild(dst.width());
 				frames_left = kShowFrames;
 			}
+			DrawProgress(dst);
 			if (!image) return;
 
 			int opacity = 255;
@@ -87,6 +100,46 @@ namespace {
 		}
 
 	private:
+		// The download progress bar, a little below the middle of the screen.
+		void DrawProgress(Bitmap& dst) {
+			YnoNet::Progress p = YnoNet::GetProgress();
+			if (!p.active) {
+				active_frames = 0;
+				return;
+			}
+			// the game often needs a single small file: only show the bar when it takes a moment
+			if (!p.batch && ++active_frames < 20) return;
+
+			constexpr int kW = 240, kH = 44;
+			const int x = (dst.width() - kW) / 2;
+			const int y = dst.height() / 2 + 18;
+
+			if (!panel) {
+				panel = Bitmap::Create(kW, kH, true);
+				panel->FillRect(panel->GetRect(), Color(190, 190, 190, 255));
+				panel->FillRect(Rect(1, 1, kW - 2, kH - 2), Color(0, 0, 0, 255));
+			}
+			dst.Blit(x, y, *panel, panel->GetRect(), Opacity(235));
+
+			FontRef font = Font::DefaultBitmapFont();
+			std::string count = p.batch || p.total > 1 ? std::to_string(p.done) + "/" + std::to_string(p.total) : "";
+			int count_w = Text::GetSize(*font, count).width;
+			Text::Draw(dst, x + 8, y + 4, *font, Color(255, 255, 255, 255), p.label);
+			if (!count.empty()) {
+				Text::Draw(dst, x + kW - 8 - count_w, y + 4, *font, Color(255, 255, 255, 255), count);
+			}
+			Text::Draw(dst, x + 8, y + 17, *font, Color(150, 150, 150, 255), Fit(*font, p.current, kW - 16));
+
+			// the bar: an outline and a fill
+			const int bx = x + 8, by = y + 33, bw = kW - 16, bh = 6;
+			dst.FillRect(Rect(bx, by, bw, bh), Color(110, 110, 110, 255));
+			dst.FillRect(Rect(bx + 1, by + 1, bw - 2, bh - 2), Color(0, 0, 0, 255));
+			if (p.total > 0) {
+				int fill = std::min(bw - 2, (bw - 2) * p.done / p.total);
+				if (fill > 0) dst.FillRect(Rect(bx + 1, by + 1, fill, bh - 2), Color(235, 235, 235, 255));
+			}
+		}
+
 		void Rebuild(int width) {
 			FontRef font = Font::DefaultBitmapFont();
 			std::vector<std::string> lines;
@@ -120,6 +173,8 @@ namespace {
 		}
 
 		BitmapRef image;
+		BitmapRef panel;
+		int active_frames = 0;
 		uint32_t seen_version = 0;
 		int frames_left = 0;
 	};

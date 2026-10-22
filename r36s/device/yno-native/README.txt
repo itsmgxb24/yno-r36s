@@ -6,9 +6,16 @@ na konsoli i laczyl sie z serwerami ynoproject.net przez libcurl. Zamiast Firefo
 caly program to jeden plik okolo 7 MB.
 
 Start:   EmulationStation -> Ports -> "Yume Nikki Online (native)"
-Lista gier: po starcie widzisz wszystkie 25 gier projektu YNO (Yume Nikki, Yume 2kki, .flow, ...)
-         z liczba graczy online. Gora/dol wybiera, A uruchamia, B zamyka program. Gra bez znacznika
-         "(download)" jest juz na karcie.
+Lista gier: po starcie widzisz tekstowe menu z wszystkimi 25 grami projektu YNO (Yume Nikki,
+         Yume 2kki, .flow, ...) i liczba graczy online. Gora/dol wybiera (lewo/prawo: cala strona),
+         A uruchamia, Y otwiera opcje gry, B zamyka program. "(download)" = gry nie ma jeszcze na karcie.
+Opcje gry (Y):
+         Verify files        porownuje rozmiar kazdego pliku gry z karty z serwerem i pobiera ponownie
+                             te, ktore sie roznia (serwer nie publikuje sum kontrolnych, wiec sprawdzany
+                             jest rozmiar)
+         Re-download files   pobiera od nowa wszystkie pliki gry, ktore sa na karcie (zapisy zostaja)
+         W trakcie widac pasek postepu; B przerywa.
+Pasek postepu pojawia sie tez w grze, gdy program pobiera brakujace pliki (kawalek ponizej srodka ekranu).
 Powrot do listy: START (menu ustawien) -> Exit. Wyjscie z programu: SELECT + START (przytrzymaj).
 Pierwsze uruchomienie gry: program sam pobiera jej dane do yno-native/games/<gra>/
          - przy wolnym internecie (ESP32) moze to chwile trwac, dalej pobiera brakujace pliki

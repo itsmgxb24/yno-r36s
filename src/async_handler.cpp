@@ -429,10 +429,16 @@ void FileRequestAsync::Start() {
 		}
 	}
 
+#ifdef YNO_NATIVE
+	// The browser encodes the URL itself; libcurl refuses a space in it. Many files have spaces,
+	// brackets or Japanese characters in their names, so everything is percent-encoded.
+	request_path = YnoNet::EncodeUrl(request_path);
+#else
 	// URL encode %, # and +
 	request_path = Utils::ReplaceAll(request_path, "%", "%25");
 	request_path = Utils::ReplaceAll(request_path, "#", "%23");
 	request_path = Utils::ReplaceAll(request_path, "+", "%2B");
+#endif
 
 	auto request_file = (it != file_mapping.end() ? it->second : path);
 	async_wget_with_retry(request_path, std::move(request_file), "", this);

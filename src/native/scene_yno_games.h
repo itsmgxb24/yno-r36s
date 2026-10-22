@@ -1,6 +1,6 @@
 /*
- * The game list of the YNO client: shown at start (and when a game is left through the settings menu)
- * so that any game of the YNOproject can be played.
+ * The game list of the YNO client: a plain text menu shown at start (and when a game is left through
+ * the settings menu) so that any game of the YNOproject can be played, verified or downloaded again.
  *
  * This file is part of EasyRPG Player.
  *
@@ -14,26 +14,11 @@
 #define EP_NATIVE_SCENE_YNO_GAMES_H
 
 #include <memory>
+#include <string>
 
+#include "../bitmap.h"
 #include "../scene.h"
-#include "../window_help.h"
-#include "../window_selectable.h"
-
-class Window_YnoGames : public Window_Selectable {
-public:
-	Window_YnoGames(int x, int y, int width, int height);
-
-	/** Redraws the whole list. */
-	void Refresh();
-	void DrawItem(int index);
-
-	/** Number of players online in game `index` (-1 = unknown). */
-	void SetOnline(int index, int count);
-	int GetOnline(int index) const { return online[index]; }
-
-private:
-	std::vector<int> online;
-};
+#include "yno_games.h"
 
 class Scene_YnoGames : public Scene {
 public:
@@ -43,17 +28,34 @@ public:
 	void Start() override;
 	void Continue(SceneType prev_scene) override;
 	void vUpdate() override;
+	void DrawBackground(Bitmap& dst) override;
 
 private:
+	enum class Mode { List, Options, Confirm, Busy, Report };
+
+	class Screen;
 	struct Shared;
 
+	void DrawScreen(Bitmap& dst);
+	void Render();
+	void UpdateList();
+	void UpdateOptions();
 	void StartGame();
+	void OpenOptions();
+	void StartMaintenance(bool force);
+	void DevHooks();
 
-	std::unique_ptr<Window_Help> help_window;
-	std::unique_ptr<Window_YnoGames> list_window;
-	std::unique_ptr<Window_Help> load_window;
-	std::shared_ptr<Shared> shared;
+	Mode mode = Mode::List;
+	int index = 0;         // selected game
+	int top = 0;           // first visible row of the list
+	int option = 0;        // selected entry of the options of a game
+	bool dirty = true;
 	bool starting = false;
+
+	std::unique_ptr<Screen> screen;
+	BitmapRef image;
+	std::shared_ptr<Shared> shared;
+	std::shared_ptr<YnoGames::Report> report;
 };
 
 #endif

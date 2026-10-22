@@ -9,6 +9,7 @@
 
 #include "scene_yno_games.h"
 
+#include <algorithm>
 #include <atomic>
 #include <cstdlib>
 #include <filesystem>
@@ -22,6 +23,8 @@
 #include "../audio_midi.h"
 #include "../audio_secache.h"
 #include "../cache.h"
+#include "../drawable.h"
+#include "../drawable_mgr.h"
 #include "../filefinder.h"
 #include "../font.h"
 #include "../game_clock.h"
@@ -37,57 +40,48 @@
 #include "yno_net.h"
 #include "yno_session.h"
 
-// ---------------------------------------------------------------- window
+namespace {
+	constexpr int kRowHeight = 14;
+	constexpr int kListTop = 24;
+	constexpr int kMargin = 8;
 
-Window_YnoGames::Window_YnoGames(int x, int y, int width, int height) :
-	Window_Selectable(x, y, width, height),
-	online(YnoGames::All().size(), -1) {
-	column_max = 1;
-}
+	const Color kText(200, 200, 200, 255);
+	const Color kBright(255, 255, 255, 255);
+	const Color kDim(110, 110, 110, 255);
+	const Color kAccent(120, 205, 150, 255);
+	const Color kWarn(230, 170, 90, 255);
 
-void Window_YnoGames::Refresh() {
-	item_max = static_cast<int>(YnoGames::All().size());
-	CreateContents();
-	contents->Clear();
-	for (int i = 0; i < item_max; ++i) {
-		DrawItem(i);
+	std::string Files(int n) {
+		return std::to_string(n) + (n == 1 ? " file" : " files");
+	}
+
+	std::string Megabytes(long long bytes) {
+		long long tenths = (bytes * 10 + 524288) / 1048576;
+		return std::to_string(tenths / 10) + "." + std::to_string(tenths % 10) + " MB";
 	}
 }
 
-void Window_YnoGames::DrawItem(int index) {
-	Rect rect = GetItemRect(index);
-	contents->ClearRect(rect);
-
-	const auto& game = YnoGames::All()[index];
-	contents->TextDraw(rect.x, rect.y, Font::ColorDefault, game.name);
-
-	if (!YnoGames::IsDownloaded(game.id)) {
-		// not on the card yet: it is downloaded when started
-		int name_width = Text::GetSize(*Font::Default(), game.name).width;
-		contents->TextDraw(rect.x + name_width + 8, rect.y, Font::ColorDisabled, "(download)");
-	}
-
-	std::string count = online[index] >= 0 ? std::to_string(online[index]) : "-";
-	contents->TextDraw(rect.width, rect.y, online[index] > 0 ? Font::ColorHeal : Font::ColorDisabled, count, Text::AlignRight);
-}
-
-void Window_YnoGames::SetOnline(int index, int count) {
-	if (index < 0 || index >= static_cast<int>(online.size()) || online[index] == count) {
-		return;
-	}
-	online[index] = count;
-	if (contents) {
-		DrawItem(index);
-	}
-}
-
-// ---------------------------------------------------------------- scene
-
-// state shared with the threads that ask the server how many players each game has
+// state shared with the threads that ask the server / scan the card
 struct Scene_YnoGames::Shared {
 	std::mutex mutex;
-	std::vector<int> online;
+	std::vector<int> online;      // players per game, -1 = unknown
+	std::string info_game;        // the game the numbers below belong to
+	int info_files = -1;          // -1 = still scanning
+	long long info_bytes = 0;
 	std::atomic<bool> dirty{false};
+};
+
+// the drawable of the scene: all the text is drawn into one bitmap that is redrawn when something changed
+class Scene_YnoGames::Screen final : public Drawable {
+public:
+	explicit Screen(Scene_YnoGames& s) : Drawable(Priority_Window), scene(s) {
+		DrawableMgr::Register(this);
+	}
+	void Draw(Bitmap& dst) override {
+		scene.DrawScreen(dst);
+	}
+private:
+	Scene_YnoGames& scene;
 };
 
 Scene_YnoGames::Scene_YnoGames() {
@@ -103,29 +97,19 @@ static void ResetToDefaultSystem() {
 	Main_Data::game_system->SetSystemGraphic(CACHE_DEFAULT_BITMAP, lcf::rpg::System::Stretch_stretch, lcf::rpg::System::Font_gothic);
 }
 
+void Scene_YnoGames::DrawBackground(Bitmap& dst) {
+	dst.Clear();
+}
+
 void Scene_YnoGames::Start() {
 	ResetToDefaultSystem();
+	screen = std::make_unique<Screen>(*this);
 
-	const int w = Player::screen_width;
-	const int h = Player::screen_height;
-
-	help_window = std::make_unique<Window_Help>(0, 0, w, 32);
-	help_window->SetText("Yume Nikki Online - choose a game");
-
-	list_window = std::make_unique<Window_YnoGames>(0, 32, w, h - 32);
-	list_window->Refresh();
-	list_window->SetActive(true);
-	std::string last = YnoGames::LastPlayed();
 	const auto& games = YnoGames::All();
-	int start = 0;
+	std::string last = YnoGames::LastPlayed();
 	for (size_t i = 0; i < games.size(); ++i) {
-		if (last == games[i].id) start = static_cast<int>(i);
+		if (last == games[i].id) index = static_cast<int>(i);
 	}
-	list_window->SetIndex(start);
-
-	load_window = std::make_unique<Window_Help>(w / 4, h / 2 - 16, w / 2, 32);
-	load_window->SetText("Loading...", Font::ColorDefault, Text::AlignCenter);
-	load_window->SetVisible(false);
 
 	// how many players are in each game (the numbers on the hub page)
 	shared = std::make_shared<Shared>();
@@ -173,10 +157,147 @@ void Scene_YnoGames::Continue(SceneType /* prev_scene */) {
 	AsyncHandler::Reset();
 
 	starting = false;
-	load_window->SetVisible(false);
-	list_window->Refresh();
-	list_window->SetActive(true);
+	mode = Mode::List;
+	dirty = true;
 }
+
+// ---------------------------------------------------------------- drawing
+
+void Scene_YnoGames::DrawScreen(Bitmap& dst) {
+	if (!image || image->width() != dst.width() || image->height() != dst.height()) {
+		image = Bitmap::Create(dst.width(), dst.height(), true);
+		dirty = true;
+	}
+	// progress of a verification changes without any key press
+	if (mode == Mode::Busy) {
+		dirty = true;
+	}
+	if (dirty) {
+		Render();
+		dirty = false;
+	}
+	dst.Blit(0, 0, *image, image->GetRect(), Opacity::Opaque());
+}
+
+void Scene_YnoGames::Render() {
+	const int w = image->width();
+	const int h = image->height();
+	FontRef font = Font::DefaultBitmapFont();
+	const auto& games = YnoGames::All();
+
+	image->FillRect(image->GetRect(), Color(0, 0, 0, 255));
+
+	auto text = [&](int x, int y, const Color& c, const std::string& s) {
+		Text::Draw(*image, x, y, *font, c, s);
+	};
+	auto right = [&](int y, const Color& c, const std::string& s) {
+		text(w - kMargin - Text::GetSize(*font, s).width, y, c, s);
+	};
+	auto header = [&](const std::string& title) {
+		text(kMargin, 4, kBright, title);
+		image->FillRect(Rect(kMargin, 19, w - 2 * kMargin, 1), Color(70, 70, 70, 255));
+	};
+	auto footer = [&](const std::string& hints) {
+		image->FillRect(Rect(kMargin, h - 18, w - 2 * kMargin, 1), Color(70, 70, 70, 255));
+		text(kMargin, h - 15, kDim, hints);
+	};
+
+	std::lock_guard<std::mutex> lock(shared->mutex);
+	const auto& game = games[index];
+
+	switch (mode) {
+	case Mode::List: {
+		header("YNOproject - choose a game");
+		int rows = (h - kListTop - 22) / kRowHeight;
+		for (int r = 0; r < rows && top + r < static_cast<int>(games.size()); ++r) {
+			int i = top + r;
+			int y = kListTop + r * kRowHeight;
+			bool selected = i == index;
+			text(kMargin, y, selected ? kBright : kText, selected ? ">" : "");
+			text(kMargin + 12, y, selected ? kBright : kText, games[i].name);
+			if (!YnoGames::IsDownloaded(games[i].id)) {
+				int name_w = Text::GetSize(*font, games[i].name).width;
+				text(kMargin + 12 + name_w + 8, y, kDim, "(download)");
+			}
+			int n = shared->online[i];
+			right(y, n > 0 ? kAccent : kDim, n >= 0 ? std::to_string(n) : "-");
+		}
+		if (starting) {
+			std::string loading = std::string("Loading ") + game.name + "...";
+			image->FillRect(Rect(0, h / 2 - 16, w, 32), Color(0, 0, 0, 255));
+			text((w - Text::GetSize(*font, loading).width) / 2, h / 2 - 6, kBright, loading);
+		}
+		if (top > 0) right(4, kDim, "^");
+		if (top + rows < static_cast<int>(games.size())) right(h - 34, kDim, "v");
+		footer("A play    Y options    B quit");
+		break;
+	}
+	case Mode::Options: {
+		header(game.name);
+		std::string info;
+		if (!YnoGames::IsDownloaded(game.id) && shared->info_files <= 0 && shared->info_game == game.id) {
+			info = "Not downloaded yet";
+		} else if (shared->info_game != game.id || shared->info_files < 0) {
+			info = "Checking the card...";
+		} else {
+			info = "On the card: " + Files(shared->info_files) + ", " + Megabytes(shared->info_bytes);
+		}
+		text(kMargin, kListTop, kDim, info);
+		const char* items[] = {"Play", "Verify files", "Re-download files", "Back"};
+		for (int i = 0; i < 4; ++i) {
+			int y = kListTop + 28 + i * kRowHeight;
+			text(kMargin, y, i == option ? kBright : kText, i == option ? ">" : "");
+			text(kMargin + 12, y, i == option ? kBright : kText, items[i]);
+		}
+		text(kMargin, kListTop + 28 + 4 * kRowHeight + 10, kDim, "Verify: compares the size of every file on the card");
+		text(kMargin, kListTop + 28 + 4 * kRowHeight + 24, kDim, "with the server and fixes the ones that differ.");
+		footer("A select    B back");
+		break;
+	}
+	case Mode::Confirm: {
+		header(game.name);
+		text(kMargin, kListTop, kBright, "Re-download " + Files(shared->info_files) + " (" + Megabytes(shared->info_bytes) + ")?");
+		text(kMargin, kListTop + 20, kText, "Every file of this game on the card is replaced");
+		text(kMargin, kListTop + 34, kText, "with a fresh copy from the server.");
+		text(kMargin, kListTop + 48, kText, "Saves are kept.");
+		footer("A yes    B no");
+		break;
+	}
+	case Mode::Busy: {
+		header(game.name);
+		text(kMargin, kListTop, kText, report && report->force ? "Re-downloading files..." : "Verifying files...");
+		text(kMargin, kListTop + 16, kDim, "This can take a while on a slow connection.");
+		footer("B cancel");
+		break;
+	}
+	case Mode::Report: {
+		header(game.name);
+		int y = kListTop;
+		auto line = [&](const Color& c, const std::string& s) {
+			text(kMargin, y, c, s);
+			y += kRowHeight;
+		};
+		if (report) {
+			line(kBright, report->force ? "Re-download finished" : "Verification finished");
+			y += 6;
+			line(kText, "Files checked:  " + std::to_string(report->total));
+			if (!report->force) line(kText, "Correct:        " + std::to_string(report->ok));
+			line(report->updated ? kAccent : kText, std::string(report->force ? "Downloaded:     " : "Repaired:       ") + std::to_string(report->updated));
+			if (report->not_on_server) line(kDim, "Not on server:  " + std::to_string(report->not_on_server));
+			if (report->failed) line(kWarn, "Failed:         " + std::to_string(report->failed));
+			if (report->cancelled) line(kWarn, "Cancelled:      " + std::to_string(report->cancelled));
+			if (report->failed || report->cancelled) {
+				y += 6;
+				line(kDim, "Run it again to retry the others.");
+			}
+		}
+		footer("A ok");
+		break;
+	}
+	}
+}
+
+// ---------------------------------------------------------------- input
 
 void Scene_YnoGames::vUpdate() {
 	if (starting) {
@@ -184,43 +305,158 @@ void Scene_YnoGames::vUpdate() {
 		return;
 	}
 
-	if (shared && shared->dirty.exchange(false)) {
-		std::lock_guard<std::mutex> lock(shared->mutex);
-		for (size_t i = 0; i < shared->online.size(); ++i) {
-			list_window->SetOnline(static_cast<int>(i), shared->online[i]);
-		}
+	DevHooks();
+
+	if (shared->dirty.exchange(false)) {
+		dirty = true;
 	}
 
-	help_window->Update();
-	list_window->Update();
-
-	// development aid: YNO_HUB_PICK=<game id> picks that game after a short while (no input needed)
-	static const char* auto_pick = getenv("YNO_HUB_PICK");
-	static int auto_frames = 0;
-	bool picked = false;
-	if (auto_pick && ++auto_frames == 200) {
-		const auto& games = YnoGames::All();
-		for (size_t i = 0; i < games.size(); ++i) {
-			if (std::string(auto_pick) == games[i].id) list_window->SetIndex(static_cast<int>(i));
+	switch (mode) {
+	case Mode::List:
+		UpdateList();
+		break;
+	case Mode::Options:
+	case Mode::Confirm:
+		UpdateOptions();
+		break;
+	case Mode::Busy:
+		if (report && report->done) {
+			mode = Mode::Report;
+			dirty = true;
+		} else if (Input::IsTriggered(Input::CANCEL)) {
+			YnoNet::CancelBatch();
 		}
-		picked = true;
+		break;
+	case Mode::Report:
+		if (Input::IsTriggered(Input::DECISION) || Input::IsTriggered(Input::CANCEL)) {
+			mode = Mode::Options;
+			dirty = true;
+		}
+		break;
+	}
+}
+
+void Scene_YnoGames::UpdateList() {
+	const int count = static_cast<int>(YnoGames::All().size());
+	const int rows = (image ? image->height() : Player::screen_height) - kListTop - 22;
+	const int visible = std::max(1, rows / kRowHeight);
+
+	int old = index;
+	if (Input::IsRepeated(Input::DOWN)) index = (index + 1) % count;
+	if (Input::IsRepeated(Input::UP)) index = (index + count - 1) % count;
+	if (Input::IsTriggered(Input::RIGHT)) index = std::min(count - 1, index + visible);
+	if (Input::IsTriggered(Input::LEFT)) index = std::max(0, index - visible);
+	if (index != old) {
+		Main_Data::game_system->SePlay(Main_Data::game_system->GetSystemSE(Main_Data::game_system->SFX_Cursor));
+		if (index < top) top = index;
+		if (index >= top + visible) top = index - visible + 1;
+		dirty = true;
+	}
+	if (top > std::max(0, count - visible)) top = std::max(0, count - visible);
+
+	if (Input::IsTriggered(Input::CANCEL)) {
+		Scene::Pop();
+	} else if (Input::IsTriggered(Input::DECISION)) {
+		Main_Data::game_system->SePlay(Main_Data::game_system->GetSystemSE(Main_Data::game_system->SFX_Decision));
+		starting = true;  // the next frame starts the game; this one draws "Loading..."
+		dirty = true;
+	} else if (Input::IsTriggered(Input::SHIFT)) {
+		Main_Data::game_system->SePlay(Main_Data::game_system->GetSystemSE(Main_Data::game_system->SFX_Decision));
+		OpenOptions();
+	}
+}
+
+void Scene_YnoGames::OpenOptions() {
+	mode = Mode::Options;
+	option = 0;
+	dirty = true;
+
+	// count what is on the card (a big game has thousands of files)
+	const std::string id = YnoGames::All()[index].id;
+	{
+		std::lock_guard<std::mutex> lock(shared->mutex);
+		shared->info_game = id;
+		shared->info_files = -1;
+	}
+	auto state = shared;
+	YnoNet::RunAsync([state, id]() {
+		auto files = YnoGames::ScanLocal(id);
+		long long bytes = 0;
+		for (const auto& f : files) bytes += f.size;
+		std::lock_guard<std::mutex> lock(state->mutex);
+		if (state->info_game == id) {
+			state->info_files = static_cast<int>(files.size());
+			state->info_bytes = bytes;
+		}
+	}, [state]() {
+		state->dirty = true;
+	});
+}
+
+void Scene_YnoGames::UpdateOptions() {
+	if (mode == Mode::Confirm) {
+		if (Input::IsTriggered(Input::DECISION)) {
+			StartMaintenance(true);
+		} else if (Input::IsTriggered(Input::CANCEL)) {
+			mode = Mode::Options;
+			dirty = true;
+		}
+		return;
+	}
+
+	int old = option;
+	if (Input::IsRepeated(Input::DOWN)) option = (option + 1) % 4;
+	if (Input::IsRepeated(Input::UP)) option = (option + 3) % 4;
+	if (option != old) {
+		Main_Data::game_system->SePlay(Main_Data::game_system->GetSystemSE(Main_Data::game_system->SFX_Cursor));
+		dirty = true;
 	}
 
 	if (Input::IsTriggered(Input::CANCEL)) {
-		Main_Data::game_system->SePlay(Main_Data::game_system->GetSystemSE(Main_Data::game_system->SFX_Cancel));
-		Scene::Pop();
-	} else if (picked || Input::IsTriggered(Input::DECISION)) {
+		mode = Mode::List;
+		dirty = true;
+	} else if (Input::IsTriggered(Input::DECISION)) {
 		Main_Data::game_system->SePlay(Main_Data::game_system->GetSystemSE(Main_Data::game_system->SFX_Decision));
-		load_window->SetVisible(true);
-		list_window->SetActive(false);
-		starting = true;  // draw "Loading..." first
+		switch (option) {
+		case 0:
+			starting = true;
+			mode = Mode::List;  // the loading line is drawn on the list
+			dirty = true;
+			break;
+		case 1:
+			StartMaintenance(false);
+			break;
+		case 2: {
+			std::lock_guard<std::mutex> lock(shared->mutex);
+			if (shared->info_files < 0 || shared->info_files == 0) {
+				break;  // nothing on the card (or still counting): the game downloads what it needs
+			}
+			mode = Mode::Confirm;
+			dirty = true;
+			break;
+		}
+		default:
+			mode = Mode::List;
+			dirty = true;
+			break;
+		}
 	}
+}
+
+void Scene_YnoGames::StartMaintenance(bool force) {
+	const std::string id = YnoGames::All()[index].id;
+	auto state = shared;
+	report = YnoGames::StartMaintenance(id, force, [state]() {
+		state->dirty = true;
+	});
+	mode = Mode::Busy;
+	dirty = true;
 }
 
 void Scene_YnoGames::StartGame() {
 	starting = false;
 
-	const auto& game = YnoGames::All()[list_window->GetIndex()];
+	const auto& game = YnoGames::All()[index];
 	const std::string dir = YnoGames::Directory(game.id);
 	std::error_code ec;
 	std::filesystem::create_directories(dir, ec);
@@ -228,8 +464,6 @@ void Scene_YnoGames::StartGame() {
 	auto fs = FileFinder::Root().Create(dir);
 	if (!fs) {
 		Output::Warning("Cannot open {}", dir);
-		load_window->SetVisible(false);
-		list_window->SetActive(true);
 		return;
 	}
 
@@ -243,4 +477,67 @@ void Scene_YnoGames::StartGame() {
 
 	// Scene_Logo downloads index.json and the startup files, then starts the game
 	Scene::Push(std::make_shared<Scene_Logo>());
+}
+
+// development aids (headless tests); harmless otherwise
+//   YNO_HUB_PICK=<id>               pick that game after a short while
+//   YNO_HUB_ACTION=<id>:verify|redownload   run a maintenance and print the report
+//   YNO_TEST_FETCH="<id>|<path>"    download one file the way the game would and print the result
+//   YNO_HUB_UI=options|confirm      open that screen of the first game after a short while
+void Scene_YnoGames::DevHooks() {
+	static const char* pick = getenv("YNO_HUB_PICK");
+	static const char* action = getenv("YNO_HUB_ACTION");
+	static const char* fetch = getenv("YNO_TEST_FETCH");
+	static const char* ui = getenv("YNO_HUB_UI");
+	static int frames = 0;
+	static bool fetched = false;
+	if (!pick && !action && !fetch && !ui) return;
+	++frames;
+
+	if (ui && frames == 50) {
+		OpenOptions();
+	}
+	if (ui && frames == 120 && std::string(ui) == "confirm") {
+		std::lock_guard<std::mutex> lock(shared->mutex);
+		shared->info_files = 3450;      // for the screenshot: pretend a big game is on the card
+		shared->info_bytes = 220000000;
+		mode = Mode::Confirm;
+		dirty = true;
+	}
+
+	auto select = [&](const std::string& id) {
+		const auto& games = YnoGames::All();
+		for (size_t i = 0; i < games.size(); ++i) {
+			if (id == games[i].id) index = static_cast<int>(i);
+		}
+	};
+
+	if (pick && frames == 200) {
+		select(pick);
+		starting = true;
+	}
+	if (action && frames == 100) {
+		std::string a = action;
+		auto colon = a.find(':');
+		select(a.substr(0, colon));
+		StartMaintenance(a.substr(colon + 1) == "redownload");
+	}
+	if (action && report && report->done) {
+		Output::Debug("maintenance: total={} ok={} updated={} not_on_server={} failed={} cancelled={}",
+			report->total, report->ok, report->updated, report->not_on_server, report->failed, report->cancelled);
+		report.reset();
+		Scene::Pop();
+	}
+	if (fetch && frames == 100 && !fetched) {
+		fetched = true;
+		std::string f = fetch;
+		auto bar = f.find('|');
+		std::string id = f.substr(0, bar), rel = f.substr(bar + 1);
+		std::string url = YnoNet::EncodeUrl(YnoNet::GetConfig().data_url + id + "/" + rel);
+		Output::Debug("fetch test: {}", url);
+		YnoNet::DownloadFile(url, YnoGames::Directory(id) + "/" + rel, [rel](bool ok, long status) {
+			Output::Debug("fetch test result: {} ok={} status={}", rel, ok, status);
+			Scene::Pop();
+		});
+	}
 }
