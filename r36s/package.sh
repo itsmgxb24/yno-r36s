@@ -23,6 +23,7 @@ cp "$HERE/device/usb-tether/usb-tether.sh" "$STAGE/usb-tether/"
 chmod +x "$STAGE"/*.sh "$STAGE/yno-native/run.sh" "$STAGE/yno-native/yno-r36s" "$STAGE/usb-tether/usb-tether.sh"
 
 mkdir -p "$OUT"
+OUT="$(cd "$OUT" && pwd)"   # zip runs inside the staging directory
 ZIP="$OUT/yno-r36s-$VERSION.zip"
 rm -f "$ZIP"
 (cd "$STAGE" && zip -qr -X "$ZIP" .)

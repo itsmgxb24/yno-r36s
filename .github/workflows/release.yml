@@ -14,6 +14,9 @@ jobs:
   build:
     runs-on: ubuntu-latest
     container: debian:trixie-slim   # the same userland as dArkOS and the local podman container
+    defaults:
+      run:
+        shell: bash   # the container's default is sh (dash), which lacks ${var//x/y}
     steps:
       - name: Install git
         run: apt-get update && apt-get install -y --no-install-recommends git ca-certificates
