@@ -169,8 +169,8 @@ void Scene_YnoGames::DrawScreen(Bitmap& dst) {
 		image = Bitmap::Create(dst.width(), dst.height(), true);
 		dirty = true;
 	}
-	// progress of a verification changes without any key press
-	if (mode == Mode::Busy) {
+	// progress of a verification (and the end of a save check) comes without any key press
+	if (mode == Mode::Busy || mode == Mode::Sync) {
 		dirty = true;
 	}
 	if (dirty) {
@@ -330,6 +330,36 @@ void Scene_YnoGames::Render() {
 		footer("A ok");
 		break;
 	}
+	case Mode::Sync: {
+		header(game.name);
+		text(kMargin, kListTop, kText, "Checking the save on the server...");
+		text(kMargin, kListTop + 16, kDim, "Slot 1 follows your YNO account.");
+		footer("B back");
+		break;
+	}
+	case Mode::Conflict: {
+		header(game.name);
+		text(kMargin, kListTop, kBright, "Slot 1 differs on the server and here,");
+		text(kMargin, kListTop + 14, kBright, "and both changed since the last sync.");
+		const std::string items[][2] = {
+			{"Use the server save", "server:  " + (pull ? pull->server_time : std::string())},
+			{"Keep the save on this console", "console: " + (pull ? pull->card_time : std::string())},
+		};
+		for (int i = 0; i < 2; ++i) {
+			int y = kListTop + 36 + i * 32;
+			text(kMargin, y, i == choice ? kBright : kText, i == choice ? ">" : "");
+			text(kMargin + 12, y, i == choice ? kBright : kText, items[i][0]);
+			text(kMargin + 12, y + 14, kDim, items[i][1]);
+		}
+		const char* hints[][2] = {
+			{"The save of this console is kept on the card", "as Save01.before-sync.lsd."},
+			{"It is uploaded. The server's save is kept on", "the card as Save01.server-copy.lsd."},
+		};
+		text(kMargin, kListTop + 112, kDim, hints[choice][0]);
+		text(kMargin, kListTop + 126, kDim, hints[choice][1]);
+		footer("A choose    B back");
+		break;
+	}
 	}
 }
 
@@ -369,6 +399,45 @@ void Scene_YnoGames::vUpdate() {
 			dirty = true;
 		}
 		break;
+	case Mode::Sync:
+	case Mode::Conflict:
+		UpdateSync();
+		break;
+	}
+}
+
+void Scene_YnoGames::UpdateSync() {
+	if (mode == Mode::Sync) {
+		if (pull && pull->finished) {
+			if (pull->result == YnoSaveSync::Result::Conflict) {
+				mode = Mode::Conflict;
+				choice = 1;
+				dirty = true;
+			} else {
+				LaunchGame();
+			}
+		} else if (Input::IsTriggered(Input::CANCEL)) {
+			// the check goes on in the background; a later start checks again
+			pull.reset();
+			mode = Mode::List;
+			dirty = true;
+		}
+		return;
+	}
+
+	if (Input::IsRepeated(Input::DOWN) || Input::IsRepeated(Input::UP)) {
+		choice = 1 - choice;
+		Main_Data::game_system->SePlay(Main_Data::game_system->GetSystemSE(Main_Data::game_system->SFX_Cursor));
+		dirty = true;
+	}
+	if (Input::IsTriggered(Input::DECISION)) {
+		Main_Data::game_system->SePlay(Main_Data::game_system->GetSystemSE(Main_Data::game_system->SFX_Decision));
+		Output::Debug("hub: save conflict of {}: {}", pull->game_id, choice == 0 ? "server" : "card");
+		LaunchGame();
+	} else if (Input::IsTriggered(Input::CANCEL)) {
+		pull.reset();
+		mode = Mode::List;
+		dirty = true;
 	}
 }
 
@@ -500,6 +569,20 @@ void Scene_YnoGames::StartMaintenance(YnoGames::Kind kind) {
 
 void Scene_YnoGames::StartGame() {
 	starting = false;
+	if (!YnoSaveSync::Enabled()) {
+		LaunchGame();
+		return;
+	}
+	// slot 1 has to be settled before the game can load it
+	pull = YnoSaveSync::StartPull(YnoGames::All()[index].id);
+	mode = Mode::Sync;
+	dirty = true;
+}
+
+void Scene_YnoGames::LaunchGame() {
+	mode = Mode::List;
+	dirty = true;
+	auto check = std::move(pull);
 
 	const auto& game = YnoGames::All()[index];
 	const std::string dir = YnoGames::Directory(game.id);
@@ -520,6 +603,15 @@ void Scene_YnoGames::StartGame() {
 	Scene_Logo::ResetIndexRequest();
 	FileFinder::SetGameFilesystem(fs);
 
+	if (check) {
+		bool upload_pending = false;
+		if (check->result == YnoSaveSync::Result::Conflict) {
+			YnoSaveSync::Resolve(*check, choice == 0);
+			upload_pending = choice != 0;  // the upload reports itself when it is done
+		}
+		if (!upload_pending) YnoSession::AddLocalMessage(YnoSaveSync::Describe(*check));
+	}
+
 	// Scene_Logo downloads index.json and the startup files, then starts the game
 	Scene::Push(std::make_shared<Scene_Logo>());
 }
@@ -536,9 +628,10 @@ void Scene_YnoGames::DevHooks() {
 	static const char* fetch = getenv("YNO_TEST_FETCH");
 	static const char* ui = getenv("YNO_HUB_UI");
 	static const char* keys = getenv("YNO_HUB_KEYS");
+	static const char* sync_ui = getenv("YNO_SAVESYNC_UI");
 	static int frames = 0;
 	static bool fetched = false;
-	if (!pick && !action && !fetch && !ui && !keys) return;
+	if (!pick && !action && !fetch && !ui && !keys && !sync_ui) return;
 	++frames;
 
 	if (keys && frames >= 60) {
@@ -566,6 +659,18 @@ void Scene_YnoGames::DevHooks() {
 		}
 	}
 
+	if (sync_ui && frames == 50) {
+		// for the screenshot of the conflict screen; nothing is written
+		pull = std::make_shared<YnoSaveSync::Pull>();
+		pull->game_id = YnoGames::All()[index].id;
+		pull->finished = true;
+		pull->result = YnoSaveSync::Result::Conflict;
+		pull->server_time = "2026-10-21 19:42 UTC";
+		pull->card_time = "2026-10-22 08:15 UTC";
+		mode = std::string(sync_ui) == "sync" ? Mode::Sync : Mode::Conflict;
+		if (mode == Mode::Sync) pull->finished = false;
+		dirty = true;
+	}
 	if (ui && frames == 50) {
 		OpenOptions();
 	}

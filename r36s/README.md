@@ -38,7 +38,8 @@ Verified on the device by the owner: Yume Nikki plays well with the hardware ren
 and what is still open (USB tethering from a phone does not work, faster links, a menu bug that may be fixed).
 
 Not done: other players on the map (needs the room key, see below), player list / parties / friends,
-badges / rankings / locations, login with an on-screen keyboard and save synchronisation.
+badges / rankings / locations, login with an on-screen keyboard. Save slot 1 follows the YNO account when `AUTH`
+is set (like on the website).
 
 ### The room key
 

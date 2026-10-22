@@ -28,6 +28,7 @@ GAMES="$APP/games"
 TTY=/dev/tty1
 
 AUTH=""                    # JWT of a logged-in YNO account ("auth" cookie), empty = guest
+SAVESYNC=1                 # 1 = slot 1 follows the save on the server (needs AUTH)
 ROOM_KEY_FILE="$APP/room.key"
 LOG_LEVEL=debug            # debug | info | warning: how much last-run.log says
 VIDEO_DRIVER=""            # empty = automatic (kmsdrm on the handheld); e.g. "offscreen" for tests
@@ -112,6 +113,7 @@ export YNO_LOG="$LOG_LEVEL"
 ARGS=(--yno-games-dir "$GAMES" --fullscreen --scaling nearest)
 [ -n "$GAME" ] && ARGS+=(--yno-game "$GAME" --project-path "$GAMES/$GAME")
 [ -n "$AUTH" ] && ARGS+=(--yno-auth "$AUTH")
+[ "$SAVESYNC" = 1 ] || ARGS+=(--yno-no-save-sync)
 [ -f "$ROOM_KEY_FILE" ] && ARGS+=(--yno-room-key-file "$ROOM_KEY_FILE")
 
 say "Starting..."

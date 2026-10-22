@@ -30,6 +30,7 @@
 #    include <filesystem>
 #    include <system_error>
 #    include "native/yno_net.h"
+#    include "native/yno_savesync.h"
 #  endif
 #endif
 
@@ -233,6 +234,9 @@ void AsyncHandler::SaveFilesystem() {
 }
 
 void AsyncHandler::SaveFilesystem(int slot_id) {
+#ifdef YNO_NATIVE
+	YnoSaveSync::OnSaved(slot_id);
+#endif
 }
 
 bool AsyncHandler::IsImportantFilePending() {

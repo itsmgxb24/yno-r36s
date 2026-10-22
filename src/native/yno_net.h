@@ -22,6 +22,7 @@ namespace YnoNet {
 		std::string server_host = "connect.ynoproject.net";    // game / session / api server
 		std::string data_url = "https://ynoproject.net/data/"; // game files: <data_url><game_id>/<file>
 		std::string auth_cookie;                               // JWT of a logged-in account; empty = guest
+		bool save_sync = true;                                 // slot 1 follows the server save (needs auth_cookie)
 		std::string room_key;                                  // secret that signs /room packets; empty = no room multiplayer
 		std::string games_dir;                                 // absolute path; <games_dir>/<game id>/ holds one game
 		std::string user_agent = "EasyRPG-YNO-native/0.1 (R36S handheld; unofficial client)";

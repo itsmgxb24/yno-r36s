@@ -57,6 +57,9 @@ namespace YnoSession {
 
 	const PlayerInfo* FindPlayer(const std::string& uuid);
 
+	/** Shows a line from the client itself in the chat (as "YNO: text"). Main thread. */
+	void AddLocalMessage(const std::string& text);
+
 	/** Sends "command<U+FFFF>arg<U+FFFF>arg...". */
 	void Send(const std::string& command, const std::vector<std::string>& args = {});
 

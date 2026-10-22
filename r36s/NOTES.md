@@ -22,7 +22,8 @@ r36s/deploy.sh /run/media/$USER/EASYROMS/ports           # the card must be moun
 - Headless tests run the aarch64 binary inside the container (qemu binfmt) with `SDL_VIDEODRIVER=dummy`:
   `YNO_LOG=debug`, `YNO_SCREENSHOT=/path.png:<frame>` (+ `YNO_QUIT_AFTER_SHOT=1`), `YNO_HUB_PICK=<id>`,
   `YNO_HUB_ACTION=<id>:verify|redownload|all`, `YNO_HUB_UI=options|confirm|options-all|confirm-all`,
-  `YNO_HUB_KEYS="ddy"` (inject keys in the list: u d a b y), `YNO_TEST_FETCH="<id>|<path>"`.
+  `YNO_HUB_KEYS="ddy"` (inject keys in the list: u d a b y), `YNO_TEST_FETCH="<id>|<path>"`,
+  `YNO_SAVESYNC_UI=conflict|sync` (show that save sync screen with made-up data).
 - Do not test network scripts with `unshare -Urn`: it still shows the host's sysfs and talks to the host's
   NetworkManager over D-Bus. Do not use `pkill -f` with a pattern that occurs in your own command line.
 
@@ -55,7 +56,12 @@ r36s/deploy.sh /run/media/$USER/EASYROMS/ports           # the card must be moun
    should work unchanged for a USB Ethernet or Wi-Fi dongle (it looks for any network interface on the USB bus).
 4. Server data is not gzip-compressed (Cloudflare, `application/octet-stream`), so compression gains nothing.
 5. Features the owner asked for and not started: player list, parties, friends, badges, rankings, locations, login
-   with an on-screen keyboard, save synchronisation, other players on the map (needs the room key).
+   with an on-screen keyboard, other players on the map (needs the room key).
+6. **Save sync (slot 1, like the website)** is in `src/native/yno_savesync.*`: checked from the game list before a game
+   starts (conflict screen when both sides changed), uploaded after each save into slot 1. Needs `AUTH`; `SAVESYNC=0`
+   switches it off. `.savesync` in the game directory remembers the last agreed server timestamp and save hash (the
+   console clock is not trusted). Tested headless against a stand-in server; not yet on the device with a real account.
+   A game started directly (`run.sh <game>`) skips the check and so never uploads.
 
 ## Not in git
 - The built binary (`yno-r36s`, rebuild it), `lib/liblcf` (cloned by `build.sh`, pinned commit).

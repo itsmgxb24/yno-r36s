@@ -196,6 +196,21 @@ uint32_t ChatVersion() {
 	return chat_version;
 }
 
+void AddLocalMessage(const std::string& text) {
+	if (text.empty()) {
+		return;
+	}
+	ChatMessage m;
+	m.name = "YNO";
+	m.text = text;
+	Output::Debug("chat: [local] {}", text);
+	chat.push_back(std::move(m));
+	while (chat.size() > kMaxChat) {
+		chat.pop_front();
+	}
+	++chat_version;
+}
+
 const PlayerInfo* FindPlayer(const std::string& uuid) {
 	auto it = players.find(uuid);
 	return it == players.end() ? nullptr : &it->second;

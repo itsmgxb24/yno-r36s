@@ -153,8 +153,8 @@ std::vector<LocalFile> ScanLocal(const std::string& id) {
 		std::string low = lower(name);
 		bool save = low.rfind("save", 0) == 0 && low.size() > 4 && low.compare(low.size() - 4, 4, ".lsd") == 0;
 		bool part = low.size() > 5 && low.compare(low.size() - 5, 5, ".part") == 0;
-		if (save || part || name == ".all-files") {
-			continue;  // the player's own saves, half-downloaded files and our marker are not the server's business
+		if (save || part || name == ".all-files" || name == ".savesync") {
+			continue;  // the player's own saves, half-downloaded files and our markers are not the server's business
 		}
 		LocalFile f;
 		f.path = fs::relative(it->path(), root, e2).generic_string();
