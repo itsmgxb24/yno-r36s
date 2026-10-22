@@ -35,9 +35,6 @@
 #include "audio_midi.h"
 #include "audio_generic_midiout.h"
 
-#ifdef __EMSCRIPTEN__
-#  include "platform/emscripten/interface.h"
-#endif
 
 class MenuItem final : public ConfigParam<std::string_view> {
 public:
@@ -380,9 +377,7 @@ void Window_Settings::RefreshAudioSoundfont() {
 		opt.help2 = "Changes take effect when a new MIDI file is played";
 	}
 
-#ifdef __EMSCRIPTEN__
-	AddOption(MenuItem("<Upload Soundfont>", "Provide a soundfont from your system", ""), [fs]() { Emscripten_Interface::UploadSoundfont(); });
-#elif defined(SUPPORT_FILE_BROWSER)
+#if defined(SUPPORT_FILE_BROWSER)
 	AddOption(MenuItem("<Open Soundfont directory>", "Open the soundfont directory in a file browser", ""), [fs]() { DisplayUi->OpenURL(fs.GetFullPath()); });
 #endif
 }
@@ -530,9 +525,7 @@ void Window_Settings::RefreshEngineFont(bool mincho) {
 	});
 	set_help2();
 
-#ifdef __EMSCRIPTEN__
-	AddOption(MenuItem("<Upload Font>", "Provide a font from your system", ""), [fs]() { Emscripten_Interface::UploadFont(); });
-#elif defined(SUPPORT_FILE_BROWSER)
+#if defined(SUPPORT_FILE_BROWSER)
 	AddOption(MenuItem("<Open Font directory>", "Open the font directory in a file browser", ""), [fs]() { DisplayUi->OpenURL(fs.GetFullPath()); });
 #endif
 }
@@ -619,9 +612,6 @@ void Window_Settings::RefreshLicense() {
 	AddOption(MenuItem("ttyp0", "ttyp0 font family", "ttyp0"), [](){});
 #ifdef WANT_FONT_WQY
 	AddOption(MenuItem("WenQuanYi", "WenQuanYi font family (CJK)", "GPLv2+ with FE"), [](){});
-#endif
-#ifdef __EMSCRIPTEN__
-	AddOption(MenuItem("Teenyicons", "Tiny minimal 1px icons", "MIT"), [](){});
 #endif
 }
 

@@ -18,9 +18,6 @@
 // Headers
 #include "game_constants.h"
 
-#ifdef __EMSCRIPTEN__
-#  include <emscripten.h>
-#endif
 
 #include <lcf/data.h>
 #include "game_dynrpg.h"

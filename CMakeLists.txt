@@ -881,16 +881,6 @@ if(APPLE)
 	target_link_libraries(${PROJECT_NAME} ${MACOSFOUNDATION} ${MACOSAUDIOUNIT} ${MACOSAUDIOTOOLBOX})
 endif()
 
-if(CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
-	option(PLAYER_JS_BUILD_SHELL
-		"Build the Player executable as a shell file (.html) instead of a standalone javascript file (.js)" OFF)
-	option(PLAYER_JS_AUDIO_WORKLETS "Use the newer Web Audio API instead of the built-in support from SDL2" OFF)
-	set(PLAYER_JS_GAME_URL "games/" CACHE STRING "Game URL/directory where the web player searches for games")
-	set(PLAYER_JS_OUTPUT_NAME "easyrpg-player" CACHE STRING "Output name of the js, html and wasm files")
-	set_property(SOURCE src/async_handler.cpp APPEND PROPERTY
-		COMPILE_DEFINITIONS "EM_GAME_URL=\"${PLAYER_JS_GAME_URL}\"")
-endif()
-
 # Endianess check
 if(CMAKE_VERSION VERSION_GREATER_EQUAL 3.20)
 	if(CMAKE_CXX_BYTE_ORDER STREQUAL "BIG_ENDIAN")
@@ -994,27 +984,17 @@ player_find_package(NAME lhasa
 )
 
 # json support
-if(CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
-	player_find_package(NAME nlohmann_json
-		VERSION 3.9.1
-		DEFINITION HAVE_NLOHMANN_JSON
-		TARGET nlohmann_json::nlohmann_json
-		REQUIRED)
-else()
-	option(PLAYER_WITH_NLOHMANN_JSON "Support processing of JSON files" ON)
-	player_find_package(NAME nlohmann_json
-		VERSION 3.9.1
-		CONDITION PLAYER_WITH_NLOHMANN_JSON
-		DEFINITION HAVE_NLOHMANN_JSON
-		TARGET nlohmann_json::nlohmann_json
-		ONLY_CONFIG)
-endif()
+option(PLAYER_WITH_NLOHMANN_JSON "Support processing of JSON files" ON)
+player_find_package(NAME nlohmann_json
+	VERSION 3.9.1
+	CONDITION PLAYER_WITH_NLOHMANN_JSON
+	DEFINITION HAVE_NLOHMANN_JSON
+	TARGET nlohmann_json::nlohmann_json
+	ONLY_CONFIG)
 
-# Platform glue towards the host: the browser (Emscripten) or the YNO native client
-option(PLAYER_YNO_NATIVE "Native YNOproject client: libcurl networking instead of the browser" OFF)
-if(CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
-	target_sources(${PROJECT_NAME} PRIVATE src/web_api.cpp)
-elseif(PLAYER_YNO_NATIVE)
+# The YNO native client: libcurl networking (this fork builds nothing else)
+option(PLAYER_YNO_NATIVE "Native YNOproject client: libcurl networking" ON)
+if(PLAYER_YNO_NATIVE)
 	find_package(CURL REQUIRED)
 	find_package(nlohmann_json REQUIRED)
 	target_sources(${PROJECT_NAME} PRIVATE
@@ -1035,7 +1015,7 @@ elseif(PLAYER_YNO_NATIVE)
 	target_compile_definitions(${PROJECT_NAME} PUBLIC YNO_NATIVE HAVE_NLOHMANN_JSON)
 	target_link_libraries(${PROJECT_NAME} CURL::libcurl nlohmann_json::nlohmann_json)
 else()
-	message(FATAL_ERROR "This fork needs -DPLAYER_YNO_NATIVE=ON (or an Emscripten toolchain): src/web_api.cpp is web only.")
+	message(FATAL_ERROR "This fork only builds the YNO native client: -DPLAYER_YNO_NATIVE=ON is required.")
 endif()
 
 # Configure Audio backends
@@ -1255,11 +1235,7 @@ if(PLAYER_BUILD_EXECUTABLE AND ${PLAYER_TARGET_PLATFORM} MATCHES "^SDL.*$" AND N
 		set_target_properties(${EXE_NAME} PROPERTIES OUTPUT_NAME "EasyRPG Player")
 	else()
 		set(EXE_NAME ${PROJECT_NAME}_exe)
-		if(CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
-			add_executable(${EXE_NAME} "src/platform/emscripten/main.cpp")
-		else()
-			add_executable(${EXE_NAME} "src/platform/sdl/main.cpp")
-		endif()
+		add_executable(${EXE_NAME} "src/platform/sdl/main.cpp")
 		set_target_properties(${EXE_NAME} PROPERTIES OUTPUT_NAME "easyrpg-player")
 	endif()
 
@@ -1283,56 +1259,6 @@ if(PLAYER_BUILD_EXECUTABLE AND ${PLAYER_TARGET_PLATFORM} MATCHES "^SDL.*$" AND N
 	endif()
 
 	target_link_libraries(${EXE_NAME} ${PROJECT_NAME})
-
-	if(CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
-		# Do not confuse this with our own -DUSE_SDL
-		# Prevent Emscripten from pulling in bundled SDL headers that break the build
-		target_compile_options(${PROJECT_NAME} PUBLIC "-sUSE_SDL=0")
-		if(PLAYER_JS_AUDIO_WORKLETS)
-			target_compile_options(${PROJECT_NAME} PUBLIC "-pthread")
-			target_compile_definitions(${PROJECT_NAME} PUBLIC SUPPORT_AUDIO_WORKLET)
-		endif()
-
-		set(PLAYER_JS_PREJS "${CMAKE_CURRENT_SOURCE_DIR}/resources/emscripten/emscripten-pre.js")
-		set(PLAYER_JS_POSTJS "${CMAKE_CURRENT_SOURCE_DIR}/resources/emscripten/emscripten-post.js")
-		set(PLAYER_JS_SHELL "${CMAKE_CURRENT_SOURCE_DIR}/resources/emscripten/emscripten-shell.html")
-
-		set_property(TARGET ${EXE_NAME} PROPERTY LINK_FLAGS
-			"-sALLOW_MEMORY_GROWTH -sMINIFY_HTML=0 -sMODULARIZE -sEXPORT_NAME=createEasyRpgPlayer \
-			 -sEXIT_RUNTIME=0 --bind --pre-js ${PLAYER_JS_PREJS} --post-js ${PLAYER_JS_POSTJS} \
-			 -sDEFAULT_LIBRARY_FUNCS_TO_INCLUDE=['$autoResumeAudioContext','$dynCall'] \
-			 -sEXPORTED_RUNTIME_METHODS=['FS','HEAPU8'] \
-			 -sEXPORTED_FUNCTIONS=_main,_malloc,_free")
-		set_source_files_properties("src/platform/sdl/main.cpp" PROPERTIES
-			OBJECT_DEPENDS "${PLAYER_JS_PREJS};${PLAYER_JS_POSTJS};${PLAYER_JS_SHELL}")
-
-		if(PLAYER_JS_BUILD_SHELL)
-			set_target_properties(${EXE_NAME} PROPERTIES SUFFIX ".html")
-			set_property(TARGET ${EXE_NAME} APPEND_STRING PROPERTY LINK_FLAGS " --shell-file ${PLAYER_JS_SHELL}")
-		endif()
-
-		if(PLAYER_JS_AUDIO_WORKLETS)
-			set_property(TARGET ${EXE_NAME} APPEND_STRING PROPERTY LINK_FLAGS
-				" -sINITIAL_MEMORY=67108864 -sAUDIO_WORKLET -sWASM_WORKERS -sUSE_PTHREADS -sPTHREAD_POOL_SIZE=1 -sPTHREAD_POOL_SIZE_STRICT=2")
-		endif()
-
-		target_compile_options(${PROJECT_NAME} PUBLIC -fno-exceptions)
-
-		target_sources(${PROJECT_NAME} PRIVATE
-				src/platform/emscripten/clock.h
-				src/platform/emscripten/interface.cpp
-				src/platform/emscripten/interface.h)
-		if(PLAYER_JS_AUDIO_WORKLETS)
-			target_sources(${PROJECT_NAME} PRIVATE
-				src/platform/emscripten/audio.h
-				src/platform/emscripten/audio.cpp)
-		endif()
-
-		target_link_libraries(${EXE_NAME} "idbfs.js")
-		target_link_libraries(${EXE_NAME} "websocket.js")
-		player_find_githash(HASH_VAR GIT_HASH)
-		set_target_properties(${EXE_NAME} PROPERTIES OUTPUT_NAME "${PLAYER_JS_OUTPUT_NAME}.${GIT_HASH}")
-	endif()
 
 	# installation
 	include(GNUInstallDirs)
@@ -1358,14 +1284,6 @@ if(PLAYER_BUILD_EXECUTABLE AND ${PLAYER_TARGET_PLATFORM} MATCHES "^SDL.*$" AND N
 
 	if(MSVC)
 		install(FILES $<TARGET_PDB_FILE:${EXE_NAME}> DESTINATION ${CMAKE_INSTALL_BINDIR} OPTIONAL)
-	endif()
-
-	if(CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
-		# Emscripten does not install the wasm file (or the js file when building a shell)
-		if(PLAYER_JS_BUILD_SHELL)
-			install(FILES ${CMAKE_CURRENT_BINARY_DIR}/${PLAYER_JS_OUTPUT_NAME}.js DESTINATION ${CMAKE_INSTALL_BINDIR})
-		endif()
-		install(FILES ${CMAKE_CURRENT_BINARY_DIR}/${PLAYER_JS_OUTPUT_NAME}.wasm DESTINATION ${CMAKE_INSTALL_BINDIR})
 	endif()
 elseif(PLAYER_CONSOLE_PORT AND NOT PLAYER_TARGET_PLATFORM STREQUAL "libretro")
 	set(CPACK_PLATFORM "${PLAYER_TARGET_PLATFORM}")
@@ -1621,20 +1539,8 @@ if(PLAYER_ENABLE_TESTS)
 		OUTPUT_NAME "test_runner"
 		WIN32_EXECUTABLE FALSE)
 
-	if(CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
-		target_compile_definitions(test_runner_player
-			PUBLIC EP_NATIVE_TEST_PATH=\"${CMAKE_CURRENT_SOURCE_DIR}/tests/assets\")
-		target_compile_definitions(test_runner_player
-			PUBLIC EP_TEST_PATH=\"/assets\")
-		target_compile_definitions(test_runner_player
-			PUBLIC DOCTEST_CONFIG_NO_EXCEPTIONS_BUT_WITH_ALL_ASSERTS=1)
-
-		target_link_libraries(test_runner_player "nodefs.js")
-		set_property(TARGET test_runner_player PROPERTY LINK_FLAGS "-sALLOW_MEMORY_GROWTH --bind")
-	else()
-		target_compile_definitions(test_runner_player
-			PUBLIC EP_TEST_PATH=\"${CMAKE_CURRENT_SOURCE_DIR}/tests/assets\")
-	endif()
+	target_compile_definitions(test_runner_player
+		PUBLIC EP_TEST_PATH=\"${CMAKE_CURRENT_SOURCE_DIR}/tests/assets\")
 	target_link_libraries(test_runner_player ${PLAYER_TEST_LIBRARIES})
 	if(CMAKE_COLOR_DIAGNOSTICS)
 		set(DOCTEST_COLOROPT "--force-colors")
@@ -1657,9 +1563,6 @@ if(NOT ${PLAYER_ENABLE_INSTRUMENTATION} STREQUAL "OFF")
 	endif()
 endif()
 
-set(PLAYER_PSK "{}" CACHE STRING "YNOproject key")
-target_compile_definitions(${PROJECT_NAME} PRIVATE PLAYER_PSK=${PLAYER_PSK})
-
 # Benchmarks
 option(PLAYER_ENABLE_BENCHMARKS "Build benchmarks" OFF)
 
@@ -1672,14 +1575,6 @@ if(PLAYER_ENABLE_BENCHMARKS)
 		set_target_properties(bench_${name} PROPERTIES WIN32_EXECUTABLE FALSE)
 		target_link_libraries(bench_${name} ${PROJECT_NAME})
 		target_link_libraries(bench_${name} benchmark)
-		if(CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
-			target_link_libraries(bench_${name} "websocket.js")
-			set_property(TARGET bench_${name} PROPERTY LINK_FLAGS
-				"-sALLOW_MEMORY_GROWTH -sMODULARIZE \
-				 -sEXIT_RUNTIME --bind \
-				 -sDEFAULT_LIBRARY_FUNCS_TO_INCLUDE=['$autoResumeAudioContext','$dynCall'] \
-				 -sEXPORTED_FUNCTIONS=_main,_malloc,_free")
-		endif()
 	endforeach()
 endif()
 
@@ -1814,19 +1709,4 @@ message(STATUS "")
 if(${PLAYER_TARGET_PLATFORM} STREQUAL "SDL1")
 	message(WARNING "SDL1 is deprecated!")
 	message(WARNING "Please migrate to SDL2 or SDL3!")
-endif()
-
-if(CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
-	set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
-	execute_process(
-			COMMAND ${CMAKE_CXX_COMPILER} --cflags
-			OUTPUT_VARIABLE EM_CFLAGS
-			COMMAND_ERROR_IS_FATAL ANY)
-	string(STRIP "${EM_CFLAGS}" EM_CFLAGS)
-	find_package(Python3 REQUIRED)
-	message("Python: ${Python3_EXECUTABLE}")
-	set(ENV{EXTRA_FLAGS} "${EM_CFLAGS}")
-	execute_process(
-			COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/fix_compile_commands.py
-			WORKING_DIRECTORY ${CMAKE_BINARY_DIR})
 endif()

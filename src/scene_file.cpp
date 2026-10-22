@@ -31,10 +31,6 @@
 #include <lcf/reader_util.h>
 #include "output.h"
 
-#ifdef __EMSCRIPTEN__
-#  include <emscripten.h>
-#  include "platform/emscripten/interface.h"
-#endif
 
 constexpr int arrow_animation_frames = 20;
 
@@ -148,10 +144,6 @@ void Scene_File::Start() {
 	}
 
 	std::vector<std::string> commands;
-#ifdef __EMSCRIPTEN__
-	commands.emplace_back("Download Savegame");
-	commands.emplace_back("Upload Savegame");
-#endif
 	extra_commands_window = std::make_unique<Window_Command>(commands);
 	extra_commands_window->SetZ(Priority_Window + 100);
 	extra_commands_window->SetVisible(false);
@@ -200,13 +192,6 @@ void Scene_File::vUpdate() {
 			Main_Data::game_system->SePlay(Main_Data::game_system->GetSystemSE(Main_Data::game_system->SFX_Buzzer));
 		}
 	} else if (Input::IsTriggered(Input::SHIFT)) {
-#ifdef __EMSCRIPTEN__
-		extra_commands_window->SetX(SCREEN_TARGET_WIDTH - extra_commands_window->GetWidth() - 8);
-		extra_commands_window->SetY(file_windows[index]->GetY() + 8);
-		extra_commands_window->SetItemEnabled(0, file_windows[index]->IsValid() && file_windows[index]->HasParty());
-		extra_commands_window->SetVisible(true);
-		return;
-#endif
 	}
 
 	int old_top_index = top_index;
@@ -297,28 +282,6 @@ bool Scene_File::HandleExtraCommandsWindow() {
 
 	extra_commands_window->Update();
 
-#ifdef __EMSCRIPTEN__
-	if (Input::IsTriggered(Input::DECISION)) {
-		if (extra_commands_window->GetIndex() == 0) {
-			// Download
-			if (!extra_commands_window->IsItemEnabled(0)) {
-				Main_Data::game_system->SePlay(Main_Data::game_system->GetSystemSE(Main_Data::game_system->SFX_Buzzer));
-				return true;
-			}
-
-			Main_Data::game_system->SePlay(Main_Data::game_system->GetSystemSE(Main_Data::game_system->SFX_Decision));
-			Emscripten_Interface::DownloadSavegame(index + 1);
-			extra_commands_window->SetVisible(false);
-		} else {
-			Main_Data::game_system->SePlay(Main_Data::game_system->GetSystemSE(Main_Data::game_system->SFX_Decision));
-			Emscripten_Interface::UploadSavegame(index + 1);
-			extra_commands_window->SetVisible(false);
-		}
-	} else if (Input::IsTriggered(Input::CANCEL)) {
-		Main_Data::game_system->SePlay(Main_Data::game_system->GetSystemSE(Main_Data::game_system->SFX_Cancel));
-		extra_commands_window->SetVisible(false);
-	}
-#endif
 
 	return true;
 }

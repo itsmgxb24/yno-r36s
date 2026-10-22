@@ -40,9 +40,6 @@
 #include "window_settings.h"
 #include <memory>
 
-#ifdef __EMSCRIPTEN__
-#  include <emscripten.h>
-#endif
 
 Scene_Settings::Scene_Settings() {
 	Scene::type = Scene::Settings;

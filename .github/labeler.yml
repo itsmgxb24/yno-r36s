@@ -96,10 +96,6 @@ Android:
 - changed-files:
   - any-glob-to-any-file: [ src/platform/android/**, builds/android/app/** ]
 
-Emscripten:
-- changed-files:
-  - any-glob-to-any-file: [ src/platform/emscripten/**, resources/emscripten/** ]
-
 libretro:
 - changed-files:
   - any-glob-to-any-file: [ src/platform/libretro/** ]

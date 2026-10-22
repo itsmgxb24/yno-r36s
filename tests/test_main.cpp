@@ -3,19 +3,8 @@
 
 #include "output.h"
 
-#ifdef __EMSCRIPTEN__
-#include <emscripten.h>
-#endif
 
 int main(int argc, char** argv) {
-#ifdef __EMSCRIPTEN__
-	EM_ASM({
-		FS.mkdir(UTF8ToString($0));
-		FS.mount(NODEFS, { root: UTF8ToString($1) }, UTF8ToString($0));
-		},
-		EP_TEST_PATH, EP_NATIVE_TEST_PATH
-	);
-#endif
 
 	Output::SetLogLevel(LogLevel::Error);
 

@@ -22,7 +22,7 @@
 
 #ifndef EP_WEBLIKE_FS
 #include "exe_reader.h"
-#endif // !__EMSCRIPTEN__
+#endif // !EP_WEBLIKE_FS
 #include "output.h"
 
 using Destiny::InterpretFlag;
@@ -81,7 +81,7 @@ void Game_Destiny::Load()
 	gameVersion = 0x20000107;
 	extra = 0x01;
 	dwordSize = floatSize = stringSize = 0x64;
-#endif // !__EMSCRIPTEN__
+#endif // !EP_WEBLIKE_FS
 
 	Initialize(dllVersion, language, gameVersion, extra, dwordSize, floatSize, stringSize);
 }

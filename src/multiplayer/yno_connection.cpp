@@ -1,141 +1,19 @@
 #include "yno_connection.h"
 #include "../external/TinySHA1.hpp"
 
-#ifdef __EMSCRIPTEN__
-#  include <emscripten/websocket.h>
-#else
-#  include "../native/yno_net.h"
-#  include "../native/yno_ws.h"
-#endif
+#include "../native/yno_net.h"
+#include "../native/yno_ws.h"
 
-#ifndef PLAYER_PSK
-#define PLAYER_PSK
-#endif
-
-#ifdef __EMSCRIPTEN__
-struct YNOConnection::IMPL {
-	EMSCRIPTEN_WEBSOCKET_T socket;
-	uint32_t msg_count;
-	bool closed;
-
-	static EM_BOOL onopen(int eventType, const EmscriptenWebSocketOpenEvent *event, void *userData) {
-		auto _this = static_cast<YNOConnection*>(userData);
-		_this->SetConnected(true);
-		_this->DispatchSystem(SystemMessage::OPEN);
-		return EM_TRUE;
-	}
-	static EM_BOOL onclose(int eventType, const EmscriptenWebSocketCloseEvent *event, void *userData) {
-		auto _this = static_cast<YNOConnection*>(userData);
-		_this->SetConnected(false);
-		_this->DispatchSystem(
-			event->code == 1028 ?
-			SystemMessage::EXIT :
-			SystemMessage::CLOSE
-		);
-		return EM_TRUE;
-	}
-	static EM_BOOL onmessage(int eventType, const EmscriptenWebSocketMessageEvent *event, void *userData) {
-		auto _this = static_cast<YNOConnection*>(userData);
-		// IMPORTANT!! numBytes is always one byte larger than the actual length
-		// so the actual length is numBytes - 1
-
-		// NOTE: that extra byte is just in text mode, and it does not exist in binary mode
-		if (event->isText) {
-			return EM_FALSE;
-		}
-		std::string_view cstr(reinterpret_cast<const char*>(event->data), event->numBytes);
-		std::vector<std::string_view> mstrs = Split(cstr, Multiplayer::Packet::MSG_DELIM);
-		for (auto& mstr : mstrs) {
-			auto p = mstr.find(Multiplayer::Packet::PARAM_DELIM);
-			if (p == mstr.npos) {
-				/*
-				Usually npos is the maximum value of size_t.
-				Adding to it is undefined behavior.
-				If it returns end iterator instead of npos, the if statement is
-				duplicated code because the statement in else clause will handle it.
-				*/
-				_this->Dispatch(mstr);
-			} else {
-				auto namestr = mstr.substr(0, p);
-				auto argstr = mstr.substr(p + Multiplayer::Packet::PARAM_DELIM.size());
-				_this->Dispatch(namestr, Split(argstr));
-			}
-		}
-		return EM_TRUE;
-	}
-
-	static void set_callbacks(int socket, void* userData) {
-		emscripten_websocket_set_onopen_callback(socket, userData, onopen);
-		emscripten_websocket_set_onclose_callback(socket, userData, onclose);
-		emscripten_websocket_set_onmessage_callback(socket, userData, onmessage);
-	}
-};
-#else // native
 struct YNOConnection::IMPL {
 	YnoNet::WsClient ws;
 	uint32_t msg_count;
 	bool closed;
 };
-#endif
 
 const size_t YNOConnection::MAX_QUEUE_SIZE{ 4088 };
 
 
 
-#ifdef __EMSCRIPTEN__
-YNOConnection::YNOConnection() : impl(new IMPL) {
-	impl->msg_count = 0;
-	impl->closed = true;
-}
-
-YNOConnection::YNOConnection(YNOConnection&& o)
-	: Connection(std::move(o)), impl(std::move(o.impl)) {
-	IMPL::set_callbacks(impl->socket, this);
-}
-YNOConnection& YNOConnection::operator=(YNOConnection&& o) {
-	Connection::operator=(std::move(o));
-	if (this != &o) {
-		Close();
-		impl = std::move(o.impl);
-		IMPL::set_callbacks(impl->socket, this);
-	}
-	return *this;
-}
-
-YNOConnection::~YNOConnection() {
-	if (impl)
-		Close();
-}
-
-void YNOConnection::Open(std::string_view uri) {
-	if (!impl->closed) {
-		Close();
-	}
-
-	std::string s {uri};
-	EmscriptenWebSocketCreateAttributes ws_attrs = {
-		s.data(),
-		"binary",
-		EM_TRUE,
-	};
-	impl->socket = emscripten_websocket_new(&ws_attrs);
-	impl->closed = false;
-	IMPL::set_callbacks(impl->socket, this);
-}
-
-void YNOConnection::Close() {
-	Multiplayer::Connection::Close();
-	if (impl->closed)
-		return;
-	impl->closed = true;
-	// strange bug:
-	// calling with (impl->socket, 1005, "any reason") raises exceptions
-	// might be an emscripten bug
-	emscripten_websocket_close(impl->socket, 0, nullptr);
-	emscripten_websocket_delete(impl->socket);
-}
-
-#else
 YNOConnection::YNOConnection() : impl(new IMPL) {
 	impl->msg_count = 0;
 	impl->closed = true;
@@ -211,7 +89,6 @@ void YNOConnection::Poll() {
 	}
 }
 
-#endif
 
 template<typename T>
 std::string_view as_bytes(const T& v) {
@@ -258,16 +135,9 @@ std::string as_big_endian_bytes(T v) {
 		return reverse_endian(sr);
 }
 
-#ifdef __EMSCRIPTEN__
-const unsigned char psk[] = PLAYER_PSK;
-#endif
 
 std::string calculate_header(uint32_t key, uint32_t count, std::string_view msg) {
-#ifdef __EMSCRIPTEN__
-	std::string hashmsg{as_bytes(psk)};
-#else
 	std::string hashmsg{YnoNet::GetConfig().room_key};
-#endif
 	hashmsg += as_big_endian_bytes(key);
 	hashmsg += as_big_endian_bytes(count);
 	hashmsg += msg;
@@ -285,23 +155,12 @@ std::string calculate_header(uint32_t key, uint32_t count, std::string_view msg)
 void YNOConnection::Send(std::string_view data) {
 	if (!IsConnected())
 		return;
-#ifdef __EMSCRIPTEN__
-	unsigned short ready;
-	emscripten_websocket_get_ready_state(impl->socket, &ready);
-	if (ready == 1) { // OPEN
-		++impl->msg_count;
-		auto sendmsg = calculate_header(GetKey(), impl->msg_count, data);
-		sendmsg += data;
-		emscripten_websocket_send_binary(impl->socket, sendmsg.data(), sendmsg.size());
-	}
-#else
 	if (impl->ws.IsOpen()) {
 		++impl->msg_count;
 		auto sendmsg = calculate_header(GetKey(), impl->msg_count, data);
 		sendmsg += data;
 		impl->ws.Send(std::move(sendmsg), true);
 	}
-#endif
 }
 
 void YNOConnection::FlushQueue() {
