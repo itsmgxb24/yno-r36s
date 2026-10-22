@@ -26,7 +26,7 @@
 #include "output.h"
 
 namespace {
-	constexpr int kWorkers = 3;
+	constexpr int kWorkers = 6;   // a game has thousands of small files: several connections keep the link busy
 	constexpr int kMaxAttempts = 5;
 
 	std::mutex work_mutex;
@@ -119,7 +119,7 @@ namespace {
 	bool DownloadOnce(const std::string& url, const std::string& tmp, long& status) {
 		FILE* f = fopen(tmp.c_str(), "wb");
 		if (!f) {
-			status = 0;
+			status = -1;   // cannot write here (a name the card's file system refuses): retrying does not help
 			return false;
 		}
 		CURL* h = thread_handle.Get();
@@ -143,8 +143,8 @@ namespace {
 		status = 0;
 		for (int attempt = 0; attempt < kMaxAttempts && !quitting; ++attempt) {
 			ok = DownloadOnce(url, tmp, status);
-			if (ok || (status >= 400 && status < 500)) {
-				break;  // done, or the file does not exist: retrying does not help
+			if (ok || status < 0 || (status >= 400 && status < 500)) {
+				break;  // done, or the file does not exist / cannot be written: retrying does not help
 			}
 			std::this_thread::sleep_for(std::chrono::milliseconds(500 << attempt));
 		}

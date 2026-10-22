@@ -215,9 +215,10 @@ void Scene_YnoGames::Render() {
 			bool selected = i == index;
 			text(kMargin, y, selected ? kBright : kText, selected ? ">" : "");
 			text(kMargin + 12, y, selected ? kBright : kText, games[i].name);
-			if (!YnoGames::IsDownloaded(games[i].id)) {
+			if (!YnoGames::IsComplete(games[i].id)) {
+				// no database yet / the game still fetches files while it runs: "Download all files" fixes that
 				int name_w = Text::GetSize(*font, games[i].name).width;
-				text(kMargin + 12 + name_w + 8, y, kDim, "(download)");
+				text(kMargin + 12 + name_w + 8, y, kDim, YnoGames::IsDownloaded(games[i].id) ? "(partial)" : "(download)");
 			}
 			int n = shared->online[i];
 			right(y, n > 0 ? kAccent : kDim, n >= 0 ? std::to_string(n) : "-");
@@ -241,32 +242,50 @@ void Scene_YnoGames::Render() {
 			info = "Checking the card...";
 		} else {
 			info = "On the card: " + Files(shared->info_files) + ", " + Megabytes(shared->info_bytes);
+			info += YnoGames::IsComplete(game.id) ? "  (complete)" : "  (of " + YnoGames::ApproxSize(game.approx_mb).substr(6) + ")";
 		}
 		text(kMargin, kListTop, kDim, info);
-		const char* items[] = {"Play", "Verify files", "Re-download files", "Back"};
-		for (int i = 0; i < 4; ++i) {
-			int y = kListTop + 28 + i * kRowHeight;
+		const char* items[] = {"Play", "Download all files", "Verify files", "Re-download files", "Back"};
+		const char* hints[][2] = {
+			{"Start the game. Files it needs and does not", "have yet are downloaded while you play."},
+			{"Gets every file now, so the game never waits", "for one. Resumes where it stopped."},
+			{"Compares the size of every file on the card", "with the server and fixes the ones that differ."},
+			{"Replaces every file on the card with a fresh", "copy from the server. Saves are kept."},
+			{"", ""},
+		};
+		for (int i = 0; i < 5; ++i) {
+			int y = kListTop + 24 + i * kRowHeight;
 			text(kMargin, y, i == option ? kBright : kText, i == option ? ">" : "");
 			text(kMargin + 12, y, i == option ? kBright : kText, items[i]);
 		}
-		text(kMargin, kListTop + 28 + 4 * kRowHeight + 10, kDim, "Verify: compares the size of every file on the card");
-		text(kMargin, kListTop + 28 + 4 * kRowHeight + 24, kDim, "with the server and fixes the ones that differ.");
+		text(kMargin, kListTop + 24 + 5 * kRowHeight + 10, kDim, hints[option][0]);
+		text(kMargin, kListTop + 24 + 5 * kRowHeight + 24, kDim, hints[option][1]);
 		footer("A select    B back");
 		break;
 	}
 	case Mode::Confirm: {
 		header(game.name);
-		text(kMargin, kListTop, kBright, "Re-download " + Files(shared->info_files) + " (" + Megabytes(shared->info_bytes) + ")?");
-		text(kMargin, kListTop + 20, kText, "Every file of this game on the card is replaced");
-		text(kMargin, kListTop + 34, kText, "with a fresh copy from the server.");
-		text(kMargin, kListTop + 48, kText, "Saves are kept.");
+		if (confirm_kind == YnoGames::Kind::DownloadAll) {
+			text(kMargin, kListTop, kBright, "Download all files of this game?");
+			text(kMargin, kListTop + 20, kText, "Size: " + YnoGames::ApproxSize(game.approx_mb) + ".");
+			text(kMargin, kListTop + 34, kText, "On a slow connection this can take hours;");
+			text(kMargin, kListTop + 48, kText, "stop it with B and continue another time.");
+			text(kMargin, kListTop + 62, kText, "Files already on the card are kept.");
+		} else {
+			text(kMargin, kListTop, kBright, "Re-download " + Files(shared->info_files) + " (" + Megabytes(shared->info_bytes) + ")?");
+			text(kMargin, kListTop + 20, kText, "Every file of this game on the card is replaced");
+			text(kMargin, kListTop + 34, kText, "with a fresh copy from the server.");
+			text(kMargin, kListTop + 48, kText, "Saves are kept.");
+		}
 		footer("A yes    B no");
 		break;
 	}
 	case Mode::Busy: {
 		header(game.name);
-		text(kMargin, kListTop, kText, report && report->force ? "Re-downloading files..." : "Verifying files...");
+		text(kMargin, kListTop, kText, !report ? "Working..." : report->kind == YnoGames::Kind::Verify ? "Verifying files..." :
+				report->kind == YnoGames::Kind::Redownload ? "Re-downloading files..." : "Downloading all files...");
 		text(kMargin, kListTop + 16, kDim, "This can take a while on a slow connection.");
+		text(kMargin, kListTop + 30, kDim, "Cancelling keeps what is already downloaded.");
 		footer("B cancel");
 		break;
 	}
@@ -278,17 +297,33 @@ void Scene_YnoGames::Render() {
 			y += kRowHeight;
 		};
 		if (report) {
-			line(kBright, report->force ? "Re-download finished" : "Verification finished");
-			y += 6;
-			line(kText, "Files checked:  " + std::to_string(report->total));
-			if (!report->force) line(kText, "Correct:        " + std::to_string(report->ok));
-			line(report->updated ? kAccent : kText, std::string(report->force ? "Downloaded:     " : "Repaired:       ") + std::to_string(report->updated));
-			if (report->not_on_server) line(kDim, "Not on server:  " + std::to_string(report->not_on_server));
-			if (report->failed) line(kWarn, "Failed:         " + std::to_string(report->failed));
-			if (report->cancelled) line(kWarn, "Cancelled:      " + std::to_string(report->cancelled));
-			if (report->failed || report->cancelled) {
+			using K = YnoGames::Kind;
+			if (!report->error.empty()) {
+				line(kWarn, report->error);
 				y += 6;
-				line(kDim, "Run it again to retry the others.");
+				line(kDim, "Check the internet connection and try again.");
+			} else {
+				line(kBright, report->kind == K::Verify ? "Verification finished" :
+						report->kind == K::Redownload ? "Re-download finished" : "Download finished");
+				y += 6;
+				if (report->kind == K::DownloadAll) {
+					line(kText, "Already on the card: " + std::to_string(report->present));
+					line(report->updated ? kAccent : kText, "Downloaded now:      " + std::to_string(report->updated));
+				} else {
+					line(kText, "Files checked:  " + std::to_string(report->total));
+					if (report->kind == K::Verify) line(kText, "Correct:        " + std::to_string(report->ok));
+					line(report->updated ? kAccent : kText, std::string(report->kind == K::Verify ? "Repaired:       " : "Downloaded:     ") + std::to_string(report->updated));
+				}
+				if (report->not_on_server) line(kDim, "Not on server:  " + std::to_string(report->not_on_server));
+				if (report->failed) line(kWarn, "Failed:         " + std::to_string(report->failed));
+				if (report->cancelled) line(kWarn, "Not done yet:    " + std::to_string(report->cancelled));
+				if (report->failed || report->cancelled) {
+					y += 6;
+					line(kDim, "Run it again to continue.");
+				} else if (report->kind == K::DownloadAll) {
+					y += 6;
+					line(kAccent, "The game is complete on the card.");
+				}
 			}
 		}
 		footer("A ok");
@@ -396,7 +431,7 @@ void Scene_YnoGames::OpenOptions() {
 void Scene_YnoGames::UpdateOptions() {
 	if (mode == Mode::Confirm) {
 		if (Input::IsTriggered(Input::DECISION)) {
-			StartMaintenance(true);
+			StartMaintenance(confirm_kind);
 		} else if (Input::IsTriggered(Input::CANCEL)) {
 			mode = Mode::Options;
 			dirty = true;
@@ -405,8 +440,8 @@ void Scene_YnoGames::UpdateOptions() {
 	}
 
 	int old = option;
-	if (Input::IsRepeated(Input::DOWN)) option = (option + 1) % 4;
-	if (Input::IsRepeated(Input::UP)) option = (option + 3) % 4;
+	if (Input::IsRepeated(Input::DOWN)) option = (option + 1) % 5;
+	if (Input::IsRepeated(Input::UP)) option = (option + 4) % 5;
 	if (option != old) {
 		Main_Data::game_system->SePlay(Main_Data::game_system->GetSystemSE(Main_Data::game_system->SFX_Cursor));
 		dirty = true;
@@ -424,13 +459,19 @@ void Scene_YnoGames::UpdateOptions() {
 			dirty = true;
 			break;
 		case 1:
-			StartMaintenance(false);
+			confirm_kind = YnoGames::Kind::DownloadAll;
+			mode = Mode::Confirm;
+			dirty = true;
 			break;
-		case 2: {
+		case 2:
+			StartMaintenance(YnoGames::Kind::Verify);
+			break;
+		case 3: {
 			std::lock_guard<std::mutex> lock(shared->mutex);
-			if (shared->info_files < 0 || shared->info_files == 0) {
-				break;  // nothing on the card (or still counting): the game downloads what it needs
+			if (shared->info_files <= 0) {
+				break;  // nothing on the card (or still counting)
 			}
+			confirm_kind = YnoGames::Kind::Redownload;
 			mode = Mode::Confirm;
 			dirty = true;
 			break;
@@ -443,10 +484,10 @@ void Scene_YnoGames::UpdateOptions() {
 	}
 }
 
-void Scene_YnoGames::StartMaintenance(bool force) {
+void Scene_YnoGames::StartMaintenance(YnoGames::Kind kind) {
 	const std::string id = YnoGames::All()[index].id;
 	auto state = shared;
-	report = YnoGames::StartMaintenance(id, force, [state]() {
+	report = YnoGames::StartMaintenance(id, kind, [state]() {
 		state->dirty = true;
 	});
 	mode = Mode::Busy;
@@ -481,7 +522,7 @@ void Scene_YnoGames::StartGame() {
 
 // development aids (headless tests); harmless otherwise
 //   YNO_HUB_PICK=<id>               pick that game after a short while
-//   YNO_HUB_ACTION=<id>:verify|redownload   run a maintenance and print the report
+//   YNO_HUB_ACTION=<id>:verify|redownload|all   run a maintenance and print the report
 //   YNO_TEST_FETCH="<id>|<path>"    download one file the way the game would and print the result
 //   YNO_HUB_UI=options|confirm      open that screen of the first game after a short while
 void Scene_YnoGames::DevHooks() {
@@ -496,6 +537,16 @@ void Scene_YnoGames::DevHooks() {
 
 	if (ui && frames == 50) {
 		OpenOptions();
+	}
+	if (ui && frames == 120 && std::string(ui) == "confirm-all") {
+		option = 1;
+		confirm_kind = YnoGames::Kind::DownloadAll;
+		mode = Mode::Confirm;
+		dirty = true;
+	}
+	if (ui && frames == 90 && std::string(ui) == "options-all") {
+		option = 1;
+		dirty = true;
 	}
 	if (ui && frames == 120 && std::string(ui) == "confirm") {
 		std::lock_guard<std::mutex> lock(shared->mutex);
@@ -520,11 +571,12 @@ void Scene_YnoGames::DevHooks() {
 		std::string a = action;
 		auto colon = a.find(':');
 		select(a.substr(0, colon));
-		StartMaintenance(a.substr(colon + 1) == "redownload");
+		std::string what = a.substr(colon + 1);
+		StartMaintenance(what == "redownload" ? YnoGames::Kind::Redownload : what == "all" ? YnoGames::Kind::DownloadAll : YnoGames::Kind::Verify);
 	}
 	if (action && report && report->done) {
-		Output::Debug("maintenance: total={} ok={} updated={} not_on_server={} failed={} cancelled={}",
-			report->total, report->ok, report->updated, report->not_on_server, report->failed, report->cancelled);
+		Output::Debug("maintenance: present={} total={} ok={} updated={} not_on_server={} failed={} cancelled={} error='{}'",
+			report->present, report->total, report->ok, report->updated, report->not_on_server, report->failed, report->cancelled, report->error);
 		report.reset();
 		Scene::Pop();
 	}

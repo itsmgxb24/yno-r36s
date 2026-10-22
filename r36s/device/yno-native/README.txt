@@ -10,9 +10,14 @@ Lista gier: po starcie widzisz tekstowe menu z wszystkimi 25 grami projektu YNO 
          Yume 2kki, .flow, ...) i liczba graczy online. Gora/dol wybiera (lewo/prawo: cala strona),
          A uruchamia, Y otwiera opcje gry, B zamyka program. "(download)" = gry nie ma jeszcze na karcie.
 Opcje gry (Y):
+         Download all files  pobiera od razu WSZYSTKIE pliki gry, zeby gra nigdy nie czekala na pobieranie
+                             (zalecane; pliki juz obecne na karcie sa pomijane, mozna przerwac przez B i
+                             wznowic kiedy indziej). Rozmiar: ok. 14-250 MB, Yume 2kki ok. 1,2 GB.
+                             Po zakonczeniu gra dostaje znak kompletnosci: bez niego na liscie widac
+                             "(partial)" albo "(download)".
          Verify files        porownuje rozmiar kazdego pliku gry z karty z serwerem i pobiera ponownie
                              te, ktore sie roznia (serwer nie publikuje sum kontrolnych, wiec sprawdzany
-                             jest rozmiar)
+                             jest rozmiar). Sprawdza tylko pliki, ktore juz sa na karcie.
          Re-download files   pobiera od nowa wszystkie pliki gry, ktore sa na karcie (zapisy zostaja)
          W trakcie widac pasek postepu; B przerywa.
 Pasek postepu pojawia sie tez w grze, gdy program pobiera brakujace pliki (kawalek ponizej srodka ekranu).

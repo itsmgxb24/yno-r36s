@@ -42,13 +42,14 @@ private:
 	void UpdateOptions();
 	void StartGame();
 	void OpenOptions();
-	void StartMaintenance(bool force);
+	void StartMaintenance(YnoGames::Kind kind);
 	void DevHooks();
 
 	Mode mode = Mode::List;
 	int index = 0;         // selected game
 	int top = 0;           // first visible row of the list
 	int option = 0;        // selected entry of the options of a game
+	YnoGames::Kind confirm_kind = YnoGames::Kind::Redownload;  // what the confirmation screen is about
 	bool dirty = true;
 	bool starting = false;
 

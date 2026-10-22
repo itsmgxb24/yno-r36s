@@ -1,5 +1,6 @@
 /*
- * The games of the YNOproject hub (ynoproject.net) that the native client can play.
+ * The games of the YNOproject hub (ynoproject.net) that the native client can play, and what can be
+ * done with their files on the card: download everything, verify, download again.
  *
  * This file is part of EasyRPG Player.
  *
@@ -21,6 +22,7 @@ namespace YnoGames {
 	struct Entry {
 		const char* id;    // the path on ynoproject.net: ynoproject.net/<id>/
 		const char* name;  // title shown in the list
+		int approx_mb;     // size of all the files, measured 2026-10 (the games get updated)
 	};
 
 	/** In the order of the hub page. */
@@ -32,6 +34,12 @@ namespace YnoGames {
 	/** The database of the game is on the card (it was played / downloaded before). */
 	bool IsDownloaded(const std::string& id);
 
+	/** "Download all files" finished without failures (so the game never has to wait for a file). */
+	bool IsComplete(const std::string& id);
+
+	/** "about 62 MB" / "about 1.2 GB" */
+	std::string ApproxSize(int mb);
+
 	/** A downloaded file of a game: path relative to the game directory (also the path on the server). */
 	struct LocalFile {
 		std::string path;
@@ -41,25 +49,32 @@ namespace YnoGames {
 	/** Lists what is on the card for a game (saves and half-downloaded files are left out). Thread-safe. */
 	std::vector<LocalFile> ScanLocal(const std::string& id);
 
-	/** Result of a verification / re-download run. Filled on the main thread. */
+	enum class Kind {
+		Verify,       // compare sizes with the server, fix the ones that differ
+		Redownload,   // replace every file on the card
+		DownloadAll,  // fetch every file of the game that is not on the card
+	};
+
+	/** Result of a run. Filled on the main thread. */
 	struct Report {
-		bool force = false;     // re-download (true) or verify (false)
-		int total = 0;
+		Kind kind = Kind::Verify;
+		int total = 0;          // files the run worked on
 		int finished = 0;
-		int ok = 0;             // verified: same size as on the server
+		int present = 0;        // DownloadAll: files that were already on the card
+		int ok = 0;             // Verify: same size as on the server
 		int updated = 0;        // downloaded (again)
 		int not_on_server = 0;
 		int failed = 0;
 		int cancelled = 0;
 		bool done = false;
+		std::string error;      // the run could not even start (no file list)
 	};
 
 	/**
-	 * Checks every file of the game on the card against the server (size), downloading again what
-	 * differs; with `force` everything is downloaded again. `on_progress` runs on the main thread after
-	 * every file, the last call has report->done set. Progress is also shown by the progress bar.
+	 * Works on the files of a game. `on_progress` runs on the main thread after every file; the last
+	 * call has report->done set. Progress is also shown by the progress bar.
 	 */
-	std::shared_ptr<Report> StartMaintenance(const std::string& id, bool force, std::function<void()> on_progress);
+	std::shared_ptr<Report> StartMaintenance(const std::string& id, Kind kind, std::function<void()> on_progress);
 
 	/** Id of the game played last, "" if none. Remembered in <games_dir>/last-game.txt. */
 	std::string LastPlayed();

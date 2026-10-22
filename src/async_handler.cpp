@@ -30,6 +30,8 @@
 #  include <nlohmann/json.hpp>
    using json = nlohmann::json;
 #  ifdef YNO_NATIVE
+#    include <filesystem>
+#    include <system_error>
 #    include "native/yno_net.h"
 #  endif
 #endif
@@ -441,6 +443,21 @@ void FileRequestAsync::Start() {
 #endif
 
 	auto request_file = (it != file_mapping.end() ? it->second : path);
+#ifdef YNO_NATIVE
+	// The browser starts with an empty file system every time; the handheld does not. A file that is
+	// already on the card (they appear atomically, so it is complete) is used as it is. Only
+	// index.json is fetched again, to notice a new version of the game.
+	if (request_file != "index.json") {
+		std::error_code ec;
+		std::string local = FileFinder::MakePath(FileFinder::Game().GetFullPath(), request_file);
+		auto size = std::filesystem::file_size(local, ec);
+		if (!ec && size > 0) {
+			state = State_WaitForStart;  // not a new file: no need to rescan the directory
+			DownloadDone(true);
+			return;
+		}
+	}
+#endif
 	async_wget_with_retry(request_path, std::move(request_file), "", this);
 #else
 #  ifndef EP_DEBUG_SIMULATE_ASYNC
